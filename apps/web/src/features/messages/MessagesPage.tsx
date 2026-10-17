@@ -37,7 +37,7 @@ export function MessagesPage() {
       {items.map((item) => <Link key={item.id} to={`/messages?conversation=${item.id}`} className="block">
         <Card className="flex items-center justify-between gap-3">
           {item.listingPhotoUrl && <img src={item.listingPhotoUrl} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover" />}
-          <div className="min-w-0"><h2 className="break-words font-semibold">{item.listingTitle ?? t('activity.item')}</h2><p className="text-xs text-stone-500">{item.lastMessageAt ? new Date(item.lastMessageAt).toLocaleString() : t('messages.noMessages')}</p></div>
+          <div className="min-w-0 flex-1"><h2 className="break-words font-semibold">{item.listingTitle ?? t('activity.item')}</h2><p className="text-xs text-stone-500">{item.lastMessageAt ? new Date(item.lastMessageAt).toLocaleString() : t('messages.noMessages')}</p></div>
           {!!item.unreadCount && <span className="rounded-full bg-brand-700 px-2 py-1 text-xs font-bold text-white">{t('messages.unread', { count: item.unreadCount })}</span>}
         </Card>
       </Link>)}

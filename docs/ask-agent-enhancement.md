@@ -15,7 +15,7 @@ Deployments must allow response streaming and avoid buffering this route.
 
 For a new task, the agent asks one casual question about the next missing fact,
 waits for a normal chat answer, then asks another only if needed. Known facts
-and corrections stay in context. Optional reply pills fill the ordinary composer;
+and corrections stay in context. Optional reply pills send the chosen answer immediately;
 there is no questionnaire form. The server emits only the first question even
 if a model proposes a batch. Fully specified follow-ups and read-only product
 help can proceed immediately. The server gives clarification priority if a
@@ -26,7 +26,9 @@ Question answers never count as approval to execute a marketplace write.
 
 - A selected photo previews immediately while uploading. An upload response
   joins pending attachments immediately, including in a newly created session.
-  Failed uploads retain the selected file with retry/remove controls, and Send
+  Sharing asks for a photo first unless one was supplied or the user declined.
+  A real photo input handoff opens Camera/Photo library. Failed uploads retain
+  the selected file with retry/remove controls, and Send
   is blocked until the photo is uploaded or removed.
 - Sent photos appear with that user message while the assistant works. Private
   reads use bearer-authenticated blobs; object URLs are revoked on cleanup.
@@ -87,7 +89,7 @@ remain. No production mutation, deployment or PR was created.
 ## Conversational discovery and saved products
 
 Older product results collapse when a newer user message arrives and can be
-reopened. Radius choices appear only on the active result when the conversation
+reopened. Radius choices send a chat answer directly and appear only on the active result when the conversation
 has not already supplied a distance. A wider check with no matches
 never promises that widening will help. Generic category names such as clothes,
 pakaian and baju resolve to clothing; specific attributes remain literal.
@@ -101,3 +103,35 @@ cards. Direct bookmark buttons are explicit user actions and apply immediately.
 
 See [Messages and saved items](conversation-and-saved-items.md) for photo privacy,
 migration and the two-browser smoke check.
+
+## Photo and location handoffs
+
+`request_input` emits a typed `input_request` part for `photo`,
+`profile_location` or `listing_pickup`. These controls open real UI instead of
+sending setup labels back into a conversation loop. Historical setup choices
+also open the appropriate control. Questions and input handoffs end the turn;
+they never approve writes.
+
+The composer clears when sending. The user can type a next draft while the
+assistant responds, and completion preserves it. A failed transport restores
+the original text only when no next draft exists; retries retain message IDs.
+
+Profile coordinates and public area are distinct. `my_account` reports
+`searchLocationSet`, `pickupLocationReady` and missing fields without revealing
+coordinates. When only a city label is missing, Ask can prepare an `areaLabel`
+preference update for explicit approval, preserving coordinates. Missing
+coordinates open the Profile location form; a city name never invents a point.
+Saving the location form resumes the chat using fresh state. Custom private
+pickup instructions open the listing review form. Direct sharing also offers
+Profile setup when needed, preserving its item fields and photos.
+
+No migration or new environment key is required for these handoffs.
+
+`npm run smoke:ask-inputs` isolates the input UI from model availability. It
+uses a disposable account and real Profile saves to verify coordinate validation,
+Cancel, preference preservation, safe chat continuation and historical setup
+choices at 320/440/1440 pixels; only the subsequent AI response is stubbed.
+`smoke:ask-agent` exercises real Gemini photo-first sharing, one-tap replies,
+immediate composer clearing/next-draft preservation and location save/resume
+before approval-only publication. Its bounded UI retry handles at most two
+transient upstream failures and reports each retry explicitly.

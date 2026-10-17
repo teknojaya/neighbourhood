@@ -16,6 +16,7 @@ import { CloseIcon } from '../../components/icons';
 import { ApiError } from '../../lib/api';
 import { createRetryKey } from '../activity/retry-key';
 import { createListing, updateListing, uploadListingPhoto } from './listingApi';
+import { ProfileLocationDialog } from '../profile/ProfileLocationDialog';
 
 interface ListingFormModalProps {
   inline?: boolean;
@@ -65,7 +66,8 @@ export function ListingFormModal({
   const [restored] = useState(() => inline && user ? getShareDraft(user.uid) : undefined);
   const cleared = useRef(false);
   const me = useMe();
-  const defaultArea = me.data?.profile?.areaLabel ?? 'Local Neighbourhood';
+  const [locationSetup, setLocationSetup] = useState(false);
+  const defaultArea = me.data?.profile?.areaLabel ?? '';
   const defaultLocation = me.data?.profile?.homeLocation;
   const keys = useRef(restored?.retryKeys ?? createRetryKey());
   const photoKey = useRef(restored?.photoKey ?? crypto.randomUUID());
@@ -143,7 +145,7 @@ export function ListingFormModal({
 
     try {
       setIsSubmitting(true);
-      if (!existingListing && !defaultLocation) throw new Error('Set your pickup location in Profile before sharing an item.');
+      if (!existingListing && (!defaultLocation || !(pointInventory?.areaLabel ?? defaultArea).trim())) throw new Error('Set your pickup location and public area in Profile before sharing an item.');
 
       if (existingListing) {
         // Edit mode
@@ -244,7 +246,7 @@ export function ListingFormModal({
     }
   };
 
-  return (
+  return (<>
     <FormSurface inline={inline} onClose={onClose}>
         <div className="flex items-center justify-between border-b border-stone-200 pb-3">
           <h2 className="text-xl font-bold text-stone-900">
@@ -261,6 +263,7 @@ export function ListingFormModal({
         </div>
 
         {inline && <p className="mt-3 text-sm text-stone-600">{restored ? 'Draft restored. ' : ''}Your draft stays here while you use the app. Refreshing or signing out clears it.</p>}
+        {!existingListing && !me.isPending && (!defaultLocation || !(pointInventory?.areaLabel ?? defaultArea).trim()) && <div className="mt-3"><Alert tone="info">Add your pickup location and public area before preparing this listing. Your item details stay here.<Button type="button" variant="secondary" onClick={() => setLocationSetup(true)}>Set Profile location</Button></Alert></div>}
 
         {errorMessage && (
           <div className="mt-4">
@@ -478,5 +481,7 @@ id="listing-field-7"               type="file"
           </div>
         </form>
     </FormSurface>
+    {locationSetup && <ProfileLocationDialog onClose={() => setLocationSetup(false)} onSaved={() => setLocationSetup(false)} />}
+    </>
   );
 }

@@ -310,8 +310,12 @@ Not canonized: isolated 10–11px badge/helper text, legacy uppercase planned-mo
 
 ## Conversational clarification and personal items
 
-Ask asks one casual question at a time through normal chat; optional reply pills
-remain shortcuts. Draft/review forms do not compete with a clarification in the
+Ask asks one casual question at a time through normal chat; reply pills send
+the chosen answer directly. Setup actions open actual photo or location controls.
+The composer clears on Send and preserves a next draft during streaming.
+Sharing requests a photo early, with an explicit option to continue without one.
+Profile location setup preserves existing coordinates when only the public area
+label is missing and resumes the chat after saving. Draft/review forms do not compete with a clarification in the
 same turn. Older product results collapse and can be reopened, retaining photos
 and bookmarks while hiding stale radius prompts. Counts and availability come
 from the product cards. Messages use the existing dock with a back chevron,

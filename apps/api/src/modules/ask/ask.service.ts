@@ -154,7 +154,8 @@ export class PrismaAskService {
         signal.throwIfAborted();
         const proposedCalls = output.parts?.filter((p) => p.functionCall) ?? [];
         // A clarification never runs alongside the requested marketplace operation.
-        const functionParts = proposedCalls.some(part => part.functionCall?.name === 'ask_questions') ? proposedCalls.filter(part => part.functionCall?.name === 'ask_questions').slice(0, 1) : proposedCalls;
+        const handoff = proposedCalls.find(part => ['ask_questions', 'request_input'].includes(part.functionCall?.name ?? ''));
+        const functionParts = handoff ? [handoff] : proposedCalls;
         if (!functionParts.length) {
           finalText = output.parts?.filter((p) => !p.thought).map((p) => p.text ?? '').join('').trim().slice(0, 8000) ?? '';
           if (!finalText && !cards.length) throw new HttpError('AI_INVALID_OUTPUT', 'The assistant returned an empty reply');
@@ -190,6 +191,8 @@ export class PrismaAskService {
         // A question card hands control to the resident; do not process their answer in this turn.
         const question = cards.find(card => card.kind === 'questions');
         if (question?.kind === 'questions') { finalText = question.questions[0]!.question; break; }
+        const input = cards.find(card => card.kind === 'input_request');
+        if (input?.kind === 'input_request') { finalText = input.prompt; break; }
       }
       if (!finalText && !cards.length) throw new HttpError('AI_INVALID_OUTPUT', 'The assistant reached its turn limit');
       await this.db.$transaction(async (tx) => {

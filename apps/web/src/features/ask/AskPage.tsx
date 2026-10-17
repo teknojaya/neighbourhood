@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router';
 import { z } from 'zod';
 import {
   AI_LIMITS, ASK_LIMITS, ApiRoutes, AskAttachmentSchema, AskSessionSchema,
-  AskSessionDetailSchema, AskSessionPageSchema, AskStatusSchema, type AskAttachment, type AskRun, type AskMessage, type AskSendBody,
+  AskSessionDetailSchema, AskSessionPageSchema, AskStatusSchema, type AskAttachment, type AskInput, type AskRun, type AskMessage, type AskSendBody,
 } from '@neighbourhood/shared';
 import { ActionPill, Alert, Button, Dialog, pillActionClass, Skeleton } from '../../components/ui';
 import { BookmarkIcon, BoxIcon, CloseIcon, HistoryIcon, PlusIcon, SearchIcon, SendIcon, SparkIcon, TrashIcon } from '../../components/icons';
@@ -17,6 +17,9 @@ import { featureError } from '../activity/feature-errors';
 import { AskCard, PrivatePhoto } from './AskCards';
 import { createRetryKey } from '../activity/retry-key';
 import { streamAsk } from '../../lib/askStream';
+import { ProfileLocationDialog } from '../profile/ProfileLocationDialog';
+import { PublishDraft } from './PublishDraft';
+import { replyInput } from './reply-intent';
 
 function answeredSearchRadius(messages: AskMessage[], before: number) {
   const history = messages.filter(message => message.sequence < before);
@@ -82,6 +85,9 @@ function AskChat({ sessionId, ensureSession, available, imagesAvailable, onDelet
   const followReply = useRef(false);
   const photoRetry = useRef(createRetryKey());
   const streamController = useRef<AbortController | null>(null);
+  const sendBusy = useRef(false), attachmentTrigger = useRef<HTMLButtonElement>(null);
+  const restoredMessage = useRef<string | null>(null);
+  const [inputForm, setInputForm] = useState<AskInput | null>(null);
   const [liveRun, setLiveRun] = useState<AskRun | null>(null);
   const [connected, setConnected] = useState(false);
   const [localPhotos, setLocalPhotos] = useState<AskAttachment[]>([]);
@@ -97,13 +103,14 @@ function AskChat({ sessionId, ensureSession, available, imagesAvailable, onDelet
       try { return await streamAsk(`${ApiRoutes.ask}/sessions/${id}/messages`, body, run => { setLiveRun(run); if (first) { first = false; void queryClient.invalidateQueries({ queryKey: ['ask-detail', id] }); } }, controller.signal); }
       finally { setConnected(false); }
     },
-    onMutate: body => { followReply.current = true; setLiveRun(null); setOptimistic({ body, attachments: photos.filter(photo => body.attachmentIds.includes(photo.id)) }); },
+    onMutate: body => { sendBusy.current = true; restoredMessage.current = null; setText(current => current.trim() === body.text ? '' : current); followReply.current = true; setLiveRun(null); setOptimistic({ body, attachments: photos.filter(photo => body.attachmentIds.includes(photo.id)) }); },
     onSuccess: async (run, body) => {
       await queryClient.invalidateQueries({ queryKey: ['ask-detail'] });
-      if (run.status !== 'failed') { setText(''); retry.current = null; }
+      if (run.status !== 'failed') retry.current = null;
       setLocalPhotos(old => old.filter(photo => !body.attachmentIds.includes(photo.id))); setOptimistic(null); setLiveRun(null);
     },
-    onSettled: () => { void queryClient.invalidateQueries({ queryKey: ['ask-detail'] }); void queryClient.invalidateQueries({ queryKey: ['ask-sessions'] }); },
+    onError: (_error, body) => setText(current => { if (current) return current; restoredMessage.current = body.text; return body.text; }),
+    onSettled: () => { sendBusy.current = false; void queryClient.invalidateQueries({ queryKey: ['ask-detail'] }); void queryClient.invalidateQueries({ queryKey: ['ask-sessions'] }); },
   });
   const detail = useQuery({
     queryKey: ['ask-detail', sessionId],
@@ -154,21 +161,28 @@ function AskChat({ sessionId, ensureSession, available, imagesAvailable, onDelet
   const completedClientId = detail.data?.latestRun?.status === 'completed' ? detail.data.latestRun.clientMessageId : null;
   const resetSend = send.reset;
   useEffect(() => {
-    if (!completedClientId || retry.current?.body.clientMessageId !== completedClientId) return;
-    const completedText = retry.current.body.text;
+    if (send.isPending || !completedClientId || retry.current?.body.clientMessageId !== completedClientId) return;
+    if (restoredMessage.current !== null) { const restored = restoredMessage.current; setText(current => current === restored ? '' : current); restoredMessage.current = null; }
     retry.current = null;
-    setText((current) => current.trim() === completedText ? '' : current);
     resetSend();
-  }, [completedClientId, resetSend, setText]);
+  }, [completedClientId, resetSend, setText, send.isPending]);
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (!online || !available || isRunning || upload.isPending || uploadFile || removePhoto.isPending || (!text.trim() && !photos.length)) return;
-    const payload = { text: text.trim(), attachmentIds: photos.slice(0, ASK_LIMITS.attachmentsPerMessage).map((a) => a.id) };
+    submitMessage(text);
+  }
+
+  function submitMessage(value: string) {
+    if (!online || !available || isRunning || sendBusy.current || upload.isPending || uploadFile || removePhoto.isPending || (!value.trim() && !photos.length)) return;
+    const payload = { text: value.trim(), attachmentIds: photos.slice(0, ASK_LIMITS.attachmentsPerMessage).map((a) => a.id) };
     const signature = JSON.stringify(payload);
     if (retry.current?.signature !== signature) retry.current = { signature, body: { ...payload, clientMessageId: crypto.randomUUID() } };
     send.mutate(retry.current.body);
   }
+
+  function requestInput(input: AskInput) { if (input === 'photo') { attachmentTrigger.current?.click(); return; } setInputForm(input); }
+  function reply(text: string) { const input = replyInput(text); if (input) requestInput(input); else submitMessage(text); }
+  const currentDraft = [...messages].reverse().flatMap(message => message.parts).find(part => part.kind === 'listing_draft');
 
   function retryTurn() {
     const message = [...messages].reverse().find((m) => m.role === 'user');
@@ -192,7 +206,7 @@ function AskChat({ sessionId, ensureSession, available, imagesAvailable, onDelet
         <p className="text-xs font-semibold text-stone-500">{message.role === 'user' ? t('ask.you') : t('ask.assistant')}</p>
         {sessionId && message.attachments.length > 0 && <div className="flex flex-wrap gap-2">{message.attachments.map((attachment) => <PrivatePhoto key={attachment.id} sessionId={sessionId} attachment={attachment} />)}</div>}
         {message.text && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.text === 'Before I continue:' ? message.parts.flatMap(part => part.kind === 'questions' ? part.questions.map(question => question.question) : []).join('\n\n') || message.text : message.text}</p>}
-        {sessionId && message.parts.filter(part => !message.parts.some(item => item.kind === 'questions') || !['listing_draft', 'action'].includes(part.kind)).map((part, index) => <AskCard key={index} part={part} sessionId={sessionId} disabled={isRunning} active={!messages.some(next => next.role === 'user' && next.sequence > message.sequence) && !optimistic} radiusAnswered={answeredSearchRadius(messages, message.sequence)} onReply={reply => { setText(reply); inputRef.current?.focus(); }} onEditDraft={() => { setText(t('ask.editDraftPrompt')); inputRef.current?.focus(); }} />)}
+        {sessionId && message.parts.filter(part => !message.parts.some(item => ['questions', 'input_request'].includes(item.kind)) || !['listing_draft', 'action'].includes(part.kind)).map((part, index) => <AskCard key={index} part={part} sessionId={sessionId} disabled={!online || isRunning || upload.isPending || Boolean(uploadFile)} active={!messages.some(next => next.role === 'user' && next.sequence > message.sequence) && !optimistic && !(part.kind === 'input_request' && part.input === 'photo' && photos.length > 0)} radiusAnswered={answeredSearchRadius(messages, message.sequence)} imagesAvailable={imagesAvailable} onReply={reply} onInput={requestInput} onEditDraft={() => { setText(t('ask.editDraftPrompt')); inputRef.current?.focus(); }} />)}
       </article>)}
       {optimistic && detail.data?.latestRun?.clientMessageId !== optimistic.body.clientMessageId && <article className="ml-6 space-y-3 rounded-2xl bg-brand-50 p-3"><p className="text-xs font-semibold text-stone-500">{t('ask.you')}</p>{sessionId && <div className="flex flex-wrap gap-2">{optimistic.attachments.map(photo => <PrivatePhoto key={photo.id} sessionId={sessionId} attachment={photo} />)}</div>}<p className="whitespace-pre-wrap break-words text-sm">{optimistic.body.text}</p></article>}
       {isRunning && <div className="mr-2 space-y-2" aria-label="Assistant response"><p role="status" className="text-sm text-brand-800">{({ thinking: 'Thinking…', searching: 'Looking nearby…', reading: 'Checking your activity…', preparing: 'Preparing your next step…', answering: 'Writing a reply…' } as const)[activeRun?.progress ?? 'thinking']}</p>{activeRun?.partialText && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{activeRun.partialText}</p>}</div>}
@@ -208,13 +222,15 @@ function AskChat({ sessionId, ensureSession, available, imagesAvailable, onDelet
       {removePhoto.isError && <Alert tone="error">{featureError(removePhoto.error)}</Alert>}
       <label className="sr-only" htmlFor="ask-message">{t('ask.message')}</label>
       <div className="flex items-end gap-2">
-        {imagesAvailable && <AttachmentButton uploading={upload.isPending} disabled={!online || isRunning || upload.isPending || photos.length >= ASK_LIMITS.attachmentsPerMessage} onFile={file => { if ((AI_LIMITS.imageMimeTypes as readonly string[]).includes(file.type) && file.size <= AI_LIMITS.imageMaxBytes) setUploadFile(file); upload.mutate(file); }} />}
-        <textarea ref={inputRef} id="ask-message" value={text} onChange={(event) => setText(event.target.value)} maxLength={ASK_LIMITS.textChars} rows={2} placeholder={t('ask.placeholder')} disabled={isRunning} className="block min-w-0 flex-1 resize-none bg-white text-base disabled:bg-stone-100" />
+        {imagesAvailable && <AttachmentButton triggerRef={attachmentTrigger} uploading={upload.isPending} disabled={!online || isRunning || upload.isPending || photos.length >= ASK_LIMITS.attachmentsPerMessage} onFile={file => { if ((AI_LIMITS.imageMimeTypes as readonly string[]).includes(file.type) && file.size <= AI_LIMITS.imageMaxBytes) setUploadFile(file); upload.mutate(file); }} />}
+        <textarea ref={inputRef} id="ask-message" value={text} onChange={(event) => { restoredMessage.current = null; setText(event.target.value); }} maxLength={ASK_LIMITS.textChars} rows={2} placeholder={t('ask.placeholder')} className="block min-w-0 flex-1 resize-none bg-white text-base" />
         {isRunning ? <Button type="button" variant="secondary" disabled={!online || stop.isPending} onClick={() => stop.mutate()}>{t('ask.stop')}</Button>
           : <button type="submit" aria-label={t('ask.send')} title={t('ask.send')} disabled={!available || !online || upload.isPending || Boolean(uploadFile) || removePhoto.isPending || (!text.trim() && photos.length === 0)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-700 text-white hover:bg-brand-800 disabled:bg-stone-200 disabled:text-stone-500"><SendIcon /></button>}
       </div>
       {upload.isPending && <p role="status" className="text-sm text-brand-800">Uploading photo…</p>}
       <details className="text-xs text-stone-600"><summary className="cursor-pointer">{t('ask.privacySummary')}</summary><p className="pt-1">{t('ask.privacy')}</p></details>
     </form>
+    {inputForm === 'profile_location' && <ProfileLocationDialog onClose={() => setInputForm(null)} onSaved={() => { setInputForm(null); submitMessage('My Profile pickup location and public area are saved. Continue using my saved Profile location.'); }} />}
+    {inputForm === 'listing_pickup' && sessionId && (currentDraft?.kind === 'listing_draft' ? <PublishDraft key={currentDraft.draft.id} draft={currentDraft.draft} sessionId={sessionId} initiallyOpen onDismiss={() => setInputForm(null)} /> : <Dialog label="Pickup details" onClose={() => setInputForm(null)}><p className="text-sm">Prepare the item draft first, then enter private pickup details in its review form.</p><Button onClick={() => { setInputForm(null); submitMessage('Prepare my private listing draft so I can review pickup details.'); }}>Continue with my draft</Button></Dialog>)}
   </div>;
 }

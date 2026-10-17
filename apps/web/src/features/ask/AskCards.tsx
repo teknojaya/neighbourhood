@@ -6,8 +6,8 @@ import { MarketplacePreview } from './MarketplacePreview';
 import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
-import { ApiRoutes, AskActionSchema, ItemCategorySchema, type AskAction, type AskAttachment, type AskPart } from '@neighbourhood/shared';
-import { Alert, Button, Card, TextField } from '../../components/ui';
+import { ApiRoutes, AskActionSchema, ItemCategorySchema, type AskAction, type AskAttachment, type AskInput, type AskPart } from '@neighbourhood/shared';
+import { ActionPill, Alert, Button, Card, TextField } from '../../components/ui';
 import { t } from '../../i18n';
 import { api, privateImage, ApiError } from '../../lib/api';
 import { featureError } from '../activity/feature-errors';
@@ -43,8 +43,9 @@ export function PrivatePhoto({ sessionId, attachment }: { sessionId: string; att
     : <span className="flex h-28 w-28 flex-col items-center justify-center gap-1 rounded-xl bg-stone-100 p-2 text-xs">{failed ? t('ask.photoUnavailable') : t('common.loading')}{failed && <button type="button" className="min-h-11 text-brand-800 underline" onClick={() => setAttempt(value => value + 1)}>Retry photo</button>}</span>;
 }
 
-export function AskCard({ part, sessionId, onEditDraft, onReply, disabled = false, active = true, radiusAnswered = false }: { part: AskPart; sessionId: string; onEditDraft(): void; onReply(text: string): void; disabled?: boolean; active?: boolean; radiusAnswered?: boolean }) {
+export function AskCard({ part, sessionId, onEditDraft, onReply, onInput, disabled = false, active = true, radiusAnswered = false, imagesAvailable = true }: { part: AskPart; sessionId: string; onEditDraft(): void; onReply(text: string): void; onInput(input: AskInput): void; disabled?: boolean; active?: boolean; radiusAnswered?: boolean; imagesAvailable?: boolean }) {
   switch (part.kind) {
+    case 'input_request': return active ? <div className="flex flex-wrap gap-2"><ActionPill type="button" disabled={disabled || part.input === 'photo' && !imagesAvailable} onClick={() => onInput(part.input)}>{part.input === 'photo' ? 'Add a photo' : part.input === 'profile_location' ? 'Set Profile location' : 'Enter custom pickup details'}</ActionPill>{part.input === 'photo' && <ActionPill type="button" disabled={disabled} onClick={() => onReply('Continue without a photo for now.')}>Continue without a photo</ActionPill>}</div> : null;
     case 'questions': return <QuestionCard part={part} onReply={onReply} disabled={disabled} active={active} />;
     case 'matches': return <Card className="space-y-3"><h3 className="font-semibold">Matches for your saved need</h3>{part.items.length === 0 && <p>No matches nearby yet.</p>}{part.items.map(item => <Link className="block border-t py-3" key={item.listing.id} to={'/listings/' + item.listing.id}><strong>{item.listing.title}</strong><p className="text-sm">{item.reason}</p>{item.missingInfo.map((info,i) => <p className="text-xs text-stone-600" key={i}>{info}</p>)}</Link>)}</Card>;
     case 'listings': return <SearchListingCard part={part} onReply={onReply} active={active} radiusAnswered={radiusAnswered} />;
@@ -113,6 +114,7 @@ function ActionCard({ action, sessionId }: { action: AskAction; sessionId: strin
       void queryClient.invalidateQueries({ queryKey: ['my-listings'] });
       void queryClient.invalidateQueries({ queryKey: ['saved-item-ids'] });
       void queryClient.invalidateQueries({ queryKey: ['saved-items'] });
+      void queryClient.invalidateQueries({ queryKey: ['me'] });
     },
   });
   const isMarketplaceHandover = action.payload.kind === 'marketplace' && ((action.payload.action.operation === 'loan_transition' && ['checked_out', 'returned'].includes(action.payload.action.body.to)) || action.payload.action.operation === 'deposit_review' || action.payload.action.operation === 'stock_adjust');

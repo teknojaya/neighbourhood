@@ -57,6 +57,13 @@ Important integration contracts:
   tools prepare approval cards; only the confirm endpoint performs the write.
   Historical listing/match photo URLs are renewed when detail is loaded.
 - `STORAGE_UNAVAILABLE` (503) identifies unavailable Ask upload storage.
+- Ask `input_request` parts contain `{ input, prompt }`, with `input` one of
+  `photo`, `profile_location`, `listing_pickup`. They open real secure controls;
+  `request_input` hands control back to the user without marketplace writes.
+  `my_account` distinguishes `searchLocationSet` from `pickupLocationReady` and
+  identifies missing coordinates/public area without exposing the point.
+  `profile_preferences` also accepts an optional trimmed `areaLabel` (1–120
+  characters); approval updates only that public label and preserves coordinates.
 - `GET /saved-items/ids` returns caller-owned bookmark listing IDs. `GET
   /saved-items` returns paged `{ id, listingId, title, createdAt, listing }`
   bookmarks with fresh product DTOs; `listing` is null when unavailable. `PUT`

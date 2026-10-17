@@ -58,6 +58,26 @@ afterAll(async () => {
   await db.$disconnect();
 });
 describe('integrated marketplace against PostgreSQL', () => {
+  it('distinguishes a missing public area from coordinates and approves its label without changing private location', async () => {
+    const f = await fixture(); await db.user.update({ where: { id: f.owner.id }, data: { areaLabel: null } });
+    const session = await f.ask.create(f.owner.id, randomUUID()); const run = await db.askRun.create({ data: { sessionId: session.id, clientMessageId: randomUUID(), requestHash: 'a'.repeat(64) } });
+    const tools = new AskTools(db, { needs: f.needs, requests: f.requests, conversations: f.conversations, notifications: f.notifications, marketplace: { listings: f.listings, loans: f.loans, communities: f.communities } });
+    const ctx = { userId: f.owner.id, sessionId: session.id, runId: run.id, attemptId: run.attemptId, signal: new AbortController().signal };
+    const account = await tools.execute('my_account', {}, ctx);
+    expect(account.result).toMatchObject({ searchLocationSet: true, pickupLocationReady: false, missingLocationFields: ['publicArea'] });
+    expect(JSON.stringify(account.result)).not.toMatch(/homeLat|homeLng|exactLocation/);
+    await tools.execute('draft_listing', { title: 'Shirt', category: 'clothing', mode: 'donate', condition: 'good', quantity: 1, description: 'One shirt.' }, ctx);
+    const blocked = await tools.execute('prepare_publish_listing', { useSavedLocation: true }, ctx);
+    expect(blocked.parts).toMatchObject([{ kind: 'input_request', input: 'profile_location' }]);
+    expect(await db.askAction.count({ where: { sessionId: session.id } })).toBe(0);
+    const action = await f.ask.prepareFromUi(f.owner.id, session.id, randomUUID(), { operation: 'profile_preferences', areaLabel: 'Jakarta' });
+    expect((await db.user.findUniqueOrThrow({ where: { id: f.owner.id } })).areaLabel).toBeNull();
+    await expect(f.ask.confirm(f.outsider.id, action.id, action.revision)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await f.ask.confirm(f.owner.id, action.id, action.revision); await f.ask.confirm(f.owner.id, action.id, action.revision);
+    expect(await db.user.findUniqueOrThrow({ where: { id: f.owner.id } })).toMatchObject({ areaLabel: 'Jakarta', homeLat: f.owner.homeLat, homeLng: f.owner.homeLng });
+    expect((await tools.execute('my_account', {}, ctx)).result).toMatchObject({ pickupLocationReady: true, missingLocationFields: [] });
+    expect((await tools.execute('prepare_publish_listing', { useSavedLocation: true }, ctx)).parts).toMatchObject([{ kind: 'action' }]);
+  });
   it('matches broad clothing words and keeps bookmarks private, idempotent and removable after unavailability', async () => {
     const f = await fixture(); const item = await f.listings.createListing(f.owner.id, { ...body(), title: 'Cotton jackets', description: 'Two cotton outer layers.', category: 'clothing' }, randomUUID());
     for (const query of ['clothes','pakaian','baju']) expect(await f.listings.searchListings({ searcherId: f.neighbour.id, center: body().exactLocation, radiusKm: 3, query, limit: 10 })).toMatchObject([{ id: item.id }]);

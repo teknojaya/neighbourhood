@@ -67,6 +67,20 @@ afterAll(async () => {
 });
 
 describe('Ask sessions, agent tools and confirmed actions against PostgreSQL', () => {
+  it('hands real photo input back without preparing a simultaneous write and does not request an existing photo again', async () => {
+    const f = await fixture(new FakeModel(() => ({ role: 'model', parts: [
+      { functionCall: { name: 'request_input', args: { input: 'photo', prompt: 'Can you add a photo of the clothes?' } } },
+      { functionCall: { name: 'prepare_save_need', args: { extraction } } },
+    ] })));
+    await f.ask.send(f.user.id, f.session.id, send('I want to donate clothes'));
+    expect(f.model.calls).toHaveLength(1); expect(await db.askAction.count({ where: { sessionId: f.session.id } })).toBe(0);
+    expect((await f.ask.detail(f.user.id, f.session.id)).messages.items.at(-1)).toMatchObject({ text: 'Can you add a photo of the clothes?', parts: [{ kind: 'input_request', input: 'photo' }] });
+    const bytes = await sharp({ create: { width: 2, height: 2, channels: 3, background: 'red' } }).png().toBuffer();
+    const photo = await f.ask.upload(f.user.id, f.session.id, bytes, 'image/png');
+    f.model.respond = (_contents, call) => call === 2 ? prepare('request_input', { input: 'photo', prompt: 'Add another?' }) : prepare('ask_questions', { questions: [{ question: 'What condition are they in?', options: ['Good'] }] });
+    await f.ask.send(f.user.id, f.session.id, { ...send('Here is my photo'), attachmentIds: [photo.id] });
+    expect((await f.ask.detail(f.user.id, f.session.id)).messages.items.at(-1)!.parts).toMatchObject([{ kind: 'questions' }]);
+  });
   it('streams authenticated text before completion and keeps JSON replay compatible', async () => {
     let release!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });

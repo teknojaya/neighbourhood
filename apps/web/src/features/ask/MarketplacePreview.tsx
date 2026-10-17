@@ -12,7 +12,7 @@ export function MarketplacePreview({ action }: { action: MarketplaceAction }) {
     case 'deposit_review': fields.push(['Decision', action.body.to], ['Accepted quantities', action.body.acceptedQuantities?.join(', ')], ['Review note', action.body.reviewNote]); break;
     case 'stock_adjust': fields.push(['Quantity change', action.body.delta], ['Reason', action.body.reason], ['Note', action.body.note]); break;
     case 'member_update': fields.push(['Role', action.role], ['Status', action.status]); break;
-    case 'profile_preferences': fields.push(['Language', action.preferredLanguage], ['Search radius in km', action.searchRadiusKm]); break;
+    case 'profile_preferences': fields.push(['Language', action.preferredLanguage], ['Search radius in km', action.searchRadiusKm], ['Public neighbourhood / city', action.areaLabel]); break;
     case 'community_create': fields.push(['Community', action.body.name], ['Area', action.body.areaLabel], ['Joining', action.body.joinPolicy]); break;
     case 'point_create': fields.push(['Point', action.body.name], ['Partner', action.body.partnerName], ['Address', action.body.exactAddress], ['Public address consent', String(action.body.publicAddressConsent)]); break;
   }

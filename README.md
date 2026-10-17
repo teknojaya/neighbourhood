@@ -49,6 +49,7 @@ applying migrations. Five account buttons are available at `/login`.
 | `npm run smoke:ui-refinements` | Ask photo controls, no-location/pending states and map radius/recovery; synthetic test tiles |
 | `npm run smoke:playground` | Five separate seeded logins, complete profiles, activity/history and product map markers |
 | `npm run smoke:ask-agent` | Real Gemini streaming, sequential Q&A, first photo, approval-only publication, clothing search and collapsible results |
+| `npm run smoke:ask-inputs` | Real Profile save, coordinate validation/cancel, safe chat continuation, legacy setup controls and responsive location form; AI continuation stubbed |
 | `npm run smoke:conversations-saved` | Two browsers: private message photos, product thumbnails and private bookmark persistence/removal |
 | `npm run smoke:search -w @neighbourhood/api` | Real Gemini radius follow-ups, farther matches and honest empty results |
 | `npm run smoke:unread` | Authorized unread counts and header read-state updates; disposable local fixtures |

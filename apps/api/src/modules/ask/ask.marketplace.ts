@@ -31,7 +31,7 @@ export async function executeMarketplace(db: Db, services: MarketplaceServices, 
     case 'stock_adjust': await communities.adjust(userId, key, action.pointId, action.body); return { message: 'Inventory adjustment recorded', link: `/communities?point=${action.pointId}` };
     case 'need_delete': await runIdempotent(db, userId, key, 'ask:need-delete', action, async tx => { await tx.need.deleteMany({ where: { id: action.needId, userId } }); return { status: 200, body: { removed: true } }; }); return { message: 'Saved need removed', link: '/needs/saved' };
     case 'notification_read': await runIdempotent(db, userId, key, 'ask:inbox-read', action, async tx => { const result = await tx.notification.updateMany({ where: { id: action.notificationId, userId }, data: { readAt: new Date() } }); if (!result.count) throw new HttpError('NOT_FOUND', 'Notification not found'); return { status: 200, body: { read: true } }; }); return { message: 'Notification marked read', link: '/notifications' };
-    case 'profile_preferences': await runIdempotent(db, userId, key, 'ask:preferences', action, async tx => { await tx.user.update({ where: { id: userId }, data: { preferredLanguage: action.preferredLanguage, searchRadiusKm: action.searchRadiusKm } }); return { status: 200, body: { updated: true } }; }); return { message: 'Preferences updated', link: '/profile' };
+    case 'profile_preferences': await runIdempotent(db, userId, key, 'ask:preferences', action, async tx => { await tx.user.update({ where: { id: userId }, data: { preferredLanguage: action.preferredLanguage, searchRadiusKm: action.searchRadiusKm, areaLabel: action.areaLabel } }); return { status: 200, body: { updated: true } }; }); return { message: 'Profile preferences updated', link: '/profile' };
   }
 }
 // Public model tools exclude secure address forms and publication. Those use UI proposals.
@@ -58,7 +58,7 @@ export async function authorizeProposal(db: Db, market: MarketplaceServices, use
     case 'stock_adjust': await market.communities.audit(userId, action.pointId); if (!await db.pointInventoryItem.count({ where: { id: action.body.itemId, pointId: action.pointId } })) throw new HttpError('NOT_FOUND', 'Inventory item unavailable'); break;
     case 'need_delete': if (!await db.need.count({ where: { id: action.needId, userId } })) throw new HttpError('NOT_FOUND', 'Saved need not found'); break;
     case 'notification_read': if (!await db.notification.count({ where: { id: action.notificationId, userId } })) throw new HttpError('NOT_FOUND', 'Notification not found'); break;
-    case 'profile_preferences': if (action.preferredLanguage === undefined && action.searchRadiusKm === undefined) throw new HttpError('VALIDATION_FAILED', 'Choose a preference'); break;
+    case 'profile_preferences': if (action.preferredLanguage === undefined && action.searchRadiusKm === undefined && action.areaLabel === undefined) throw new HttpError('VALIDATION_FAILED', 'Choose a preference'); break;
   }
   return action;
 }

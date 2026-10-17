@@ -1,5 +1,26 @@
 # Mobile-first UI enhancement
 
+Photo/location follow-up, 2026-10-18: reply and radius choices send directly;
+the composer clears immediately and preserves the next draft. Sharing asks for
+a photo early. Typed setup handoffs open real photo, Profile location or listing
+review controls, including compatibility with historical text choices. The
+reported location loop was a missing public area label with coordinates already
+present; the agent now distinguishes these fields, can prepare an area-label
+update for approval, and resumes after the secure Profile form saves. Direct
+Share also offers Profile setup instead of inventing a public area. Message-list
+titles now align beside thumbnails. No migration or environment change.
+
+Verification: 97 unit tests and 54 PostgreSQL tests passed. Real Gemini/browser/
+bucket photo-first sharing, one-tap replies, composer/next-draft behavior,
+location save/resume and photographed approval-only publication passed. Two
+initial live attempts encountered transient `AI_UPSTREAM_ERROR`; the subsequent
+complete run passed. The two-browser conversation/bookmark smoke passed. A
+separate input UI smoke uses real Profile saves with a stubbed AI continuation
+to test manual validation, Cancel, preference preservation, safe continuation,
+legacy setup controls and 320/440/1440 layouts. The design scan found only the
+incumbent 11px listing-form advisory. Physical device location permission and
+camera behavior remain device checks.
+
 Latest follow-up, 2026-10-18: Ask uses one-question conversational clarification;
 product results collapse and no longer repeat answered radius choices. Clothing
 category synonyms fix missed generic searches. Messages add product thumbnails,

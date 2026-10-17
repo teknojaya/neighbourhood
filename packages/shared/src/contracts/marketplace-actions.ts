@@ -21,7 +21,7 @@ export const MarketplaceActionSchema = z.discriminatedUnion('operation', [
   z.strictObject({ operation: z.literal('stock_adjust'), pointId: z.uuid(), body: AdjustStockBodySchema }),
   z.strictObject({ operation: z.literal('need_delete'), needId: z.uuid() }),
   z.strictObject({ operation: z.literal('notification_read'), notificationId: z.uuid() }),
-  z.strictObject({ operation: z.literal('profile_preferences'), preferredLanguage: UiLanguageSchema.optional(), searchRadiusKm: RadiusKmSchema.optional() }),
+  z.strictObject({ operation: z.literal('profile_preferences'), preferredLanguage: UiLanguageSchema.optional(), searchRadiusKm: RadiusKmSchema.optional(), areaLabel: z.string().trim().min(1).max(120).optional() }),
   z.strictObject({ operation: z.literal('saved_item_add'), listingId: z.uuid() }),
   z.strictObject({ operation: z.literal('saved_item_remove'), listingId: z.uuid() }),
 ]);

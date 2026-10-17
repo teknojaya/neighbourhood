@@ -56,7 +56,10 @@ export const AskListingDraftDataSchema = z.strictObject({
 });
 export const AskListingDraftSchema = z.object({ id: IdSchema, data: AskListingDraftDataSchema, attachments: z.array(AskAttachmentSchema).max(2).default([]), updatedAt: IsoDateTimeSchema });
 export type AskListingDraft = z.infer<typeof AskListingDraftSchema>;
+export const AskInputSchema = z.enum(['photo', 'profile_location', 'listing_pickup']);
+export type AskInput = z.infer<typeof AskInputSchema>;
 export const AskPartSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('input_request'), input: AskInputSchema, prompt: z.string().trim().min(1).max(300) }),
   z.object({ kind: z.literal('questions'), questions: z.array(z.object({ question: z.string().trim().min(1).max(240), options: z.array(z.string().trim().min(1).max(100)).max(6).default([]) })).min(1).max(4) }),
   z.object({ kind: z.literal('matches'), items: NeedMatchesSchema.shape.items }),
   z.object({ kind: z.literal('listings'), items: z.array(ListingPublicSchema), search: AskSearchScopeSchema.optional() }),

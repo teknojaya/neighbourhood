@@ -37,3 +37,7 @@ apps/api/.agents/
 # Local file storage uploads
 uploads/
 apps/api/uploads/
+
+# Local UI captures and interactive design selection payloads
+apps/web/.impeccable/review/
+apps/web/.impeccable/mocks/decision/home-options.json

@@ -3,7 +3,7 @@ import { LoansPanel } from '../loans/LoansPanel';
 import { type DonationRequest } from '@neighbourhood/shared';
 import { useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { Alert, Button, Card, TextField } from '../../components/ui';
+import { Alert, Button, Card, PageHeading, Skeleton, TextField } from '../../components/ui';
 import { t } from '../../i18n';
 import { useOnline } from '../../lib/useOnline';
 import { featureError } from './feature-errors';
@@ -12,20 +12,18 @@ import { useRequest, useRequests, useRequestTransition } from './useRequests';
 
 export function ActivityPage() {
   const [direction, setDirection] = useState<'incoming' | 'outgoing'>('outgoing');
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
+  const tab = params.has('request') ? 'requests' : params.has('loan') ? 'loans' : params.get('tab') === 'giving' ? 'giving' : params.get('tab') === 'loans' ? 'loans' : 'requests';
   const focused = useRequest(params.get('request'));
   const list = useRequests(direction);
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">{t('activity.title')}</h1>
-      <p className="text-sm text-stone-600">{t('activity.intro')}</p>
-      <MyListingsPanel />
-      <LoansPanel />
-      <div className="flex flex-wrap gap-3 text-sm font-semibold text-brand-800">
-        <Link to="/messages" className="min-h-11 py-3 underline">{t('module.messages.title')}</Link>
-        <Link to="/notifications" className="min-h-11 py-3 underline">{t('module.notifications.title')}</Link>
-      </div>
+      <PageHeading title="Activity">Keep track of requests, handovers and the things you share.</PageHeading>
+      <div className="grid grid-cols-3 gap-1 rounded-xl bg-stone-100 p-1" role="group" aria-label="Activity view">{([['requests', 'Requests'], ['loans', 'Loans'], ['giving', 'Shared items']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={tab === value} className={`min-h-11 rounded-lg px-2 text-sm font-semibold ${tab === value ? 'bg-white text-brand-800' : 'text-stone-600'}`} onClick={() => setParams({ tab: value })}>{label}</button>)}</div>
+      {tab === 'giving' && <MyListingsPanel />}
+      {tab === 'loans' && <LoansPanel />}
+      {tab === 'requests' && <>
       {focused.isLoading && <p role="status">{t('common.loading')}</p>}
       {focused.isError && <Alert tone="error">{featureError(focused.error)}</Alert>}
       {focused.data && <RequestCard key={`focused-${focused.data.id}`} item={focused.data} />}
@@ -34,11 +32,12 @@ export function ActivityPage() {
           <Button key={value} variant={direction === value ? 'primary' : 'secondary'} aria-pressed={direction === value} onClick={() => setDirection(value)}>{t(`activity.${value}`)}</Button>
         ))}
       </div>
-      {list.isPending && <p role="status">{t('common.loading')}</p>}
+      {list.isPending && <Skeleton />}
       {list.isError && <Alert tone="error">{featureError(list.error)} <Button variant="ghost" onClick={() => void list.refetch()}>{t('common.retry')}</Button></Alert>}
       {list.isSuccess && items.length === 0 && <Card><p className="text-stone-600">{t(`activity.empty.${direction}`)}</p><Link to="/explore" className="mt-3 inline-block py-2 font-semibold text-brand-800 underline">{t('nav.explore')}</Link></Card>}
       {items.filter((item) => item.id !== focused.data?.id).map((item) => <RequestCard key={item.id} item={item} />)}
       {list.hasNextPage && <Button variant="secondary" className="w-full" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>{t('common.loadMore')}</Button>}
+      </>}
     </div>
   );
 }

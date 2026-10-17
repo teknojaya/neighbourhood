@@ -16,5 +16,11 @@ export function MarketplacePreview({ action }: { action: MarketplaceAction }) {
     case 'community_create': fields.push(['Community', action.body.name], ['Area', action.body.areaLabel], ['Joining', action.body.joinPolicy]); break;
     case 'point_create': fields.push(['Point', action.body.name], ['Partner', action.body.partnerName], ['Address', action.body.exactAddress], ['Public address consent', String(action.body.publicAddressConsent)]); break;
   }
+  if (action.operation === 'listing_publish' || action.operation === 'listing_edit') {
+    const appliance = action.body.appliance;
+    if (appliance) fields.push(['Working status', appliance.workingStatus], ['Brand', appliance.brand], ['Model', appliance.model], ['Weight (kg)', appliance.approxWeightKg], ['Dimensions (cm)', appliance.dimensionsCm ? `${appliance.dimensionsCm.width} × ${appliance.dimensionsCm.height} × ${appliance.dimensionsCm.depth}` : 'Not confirmed'], ['Power', appliance.powerRequirement], ['Pickup floor', appliance.access.floorLevel ?? 'Not confirmed'], ['Elevator', appliance.access.elevatorAvailable == null ? 'Not confirmed' : appliance.access.elevatorAvailable ? 'Yes' : 'No'], ['Dismantling', appliance.access.requiresDismantling == null ? 'Not confirmed' : appliance.access.requiresDismantling ? 'Required' : 'Not required'], ['Installation', appliance.access.requiresInstallation == null ? 'Not confirmed' : appliance.access.requiresInstallation ? 'Required' : 'Not required'], ['Helpers', appliance.access.suggestedHelpers ?? 'Not confirmed'], ['Access notes', appliance.access.notes]);
+    if (action.body.lending) fields.push(['Loan notes', action.body.lending.notes], ['Deposit required', action.body.lending.depositRequired ? 'Yes' : 'No']);
+  }
+  if (action.operation === 'point_create') fields.push(['Public area', action.body.areaLabel], ['Point latitude', action.body.location.lat], ['Point longitude', action.body.location.lng]);
   return <dl className="space-y-2 text-sm">{fields.filter(([,v]) => v !== undefined && v !== null && v !== '').map(([label, value], i) => <div key={i}><dt className="font-medium text-stone-600">{label}</dt><dd className="whitespace-pre-wrap break-words">{value}</dd></div>)}</dl>;
 }

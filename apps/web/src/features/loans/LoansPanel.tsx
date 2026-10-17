@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { LoanPageSchema, LoanSchema, type Loan } from '@neighbourhood/shared';
 import { api } from '../../lib/api';
-import { Alert, Button, Card, TextField } from '../../components/ui';
+import { Alert, Button, Card, Skeleton, TextField } from '../../components/ui';
 import { createRetryKey } from '../activity/retry-key';
 
 export function LoansPanel() {
@@ -12,7 +12,7 @@ export function LoansPanel() {
   const focused = useQuery({ queryKey: ['loans', focusedId], queryFn: () => api('/api/v1/loans/' + focusedId, { schema: LoanSchema }), enabled: Boolean(focusedId) });
   const list = useQuery({ queryKey: ['loans', direction], queryFn: () => api('/api/v1/loans?direction=' + direction, { schema: LoanPageSchema }), refetchInterval: 15_000 });
   return <section className="space-y-3"><h2 className="font-semibold">Borrowing and lending</h2><div className="grid grid-cols-2 gap-2">{(['outgoing', 'incoming'] as const).map(d => <Button variant={direction === d ? 'primary' : 'secondary'} key={d} onClick={() => setDirection(d)}>{d === 'incoming' ? 'Lending out' : 'Borrowing'}</Button>)}</div>
-    {list.isPending && <p role="status">Loading loans…</p>}{list.isError && <Alert tone="error">{list.error.message}</Alert>}{focused.isError && <Alert tone="error">{focused.error.message}</Alert>}
+    {list.isPending && <Skeleton />}{list.isError && <Alert tone="error">{list.error.message}</Alert>}{focused.isError && <Alert tone="error">{focused.error.message}</Alert>}
     {focused.data && <LoanCard item={focused.data} />}{list.data?.items.length === 0 && <Card>No loans yet. <Link to="/explore?mode=lend" className="underline">Find something to borrow</Link></Card>}
     {list.data?.items.filter(l => l.id !== focusedId).map(l => <LoanCard key={l.id} item={l} />)}
   </section>;

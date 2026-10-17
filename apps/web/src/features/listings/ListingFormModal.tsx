@@ -1,4 +1,7 @@
 import { useState, useRef, useEffect, type ChangeEvent, type FormEvent } from 'react';
+import { AI_LIMITS } from '@neighbourhood/shared';
+import { useAuth } from '../../auth/AuthProvider';
+import { getShareDraft, removeShareDraft, saveShareDraft } from './shareDraftStore';
 import type {
   CreateListingBody,
   AskListingDraft,
@@ -8,12 +11,14 @@ import type {
   ListingPublic,
 } from '@neighbourhood/shared';
 import { useMe } from '../../auth/useMe';
-import { Alert, Button, Card, TextField } from '../../components/ui';
+import { Alert, Button, FormSurface, TextField } from '../../components/ui';
+import { CloseIcon } from '../../components/icons';
 import { ApiError } from '../../lib/api';
 import { createRetryKey } from '../activity/retry-key';
 import { createListing, updateListing, uploadListingPhoto } from './listingApi';
 
 interface ListingFormModalProps {
+  inline?: boolean;
   existingListing?: ListingPublic | null;
   initialDraft?: AskListingDraft['data'];
   onPrepare?: (body: CreateListingBody) => Promise<void>;
@@ -24,12 +29,12 @@ interface ListingFormModalProps {
 }
 
 const CATEGORIES: Array<{ value: ItemCategory; label: string; icon: string }> = [
-  { value: 'groceries', label: 'Groceries / Food', icon: '🥫' },
-  { value: 'clothing', label: 'Clothing & Wear', icon: '👕' },
-  { value: 'books', label: 'Books & Learning', icon: '📚' },
-  { value: 'household', label: 'Household Items', icon: '🏡' },
-  { value: 'appliances', label: 'Appliances & Tools', icon: '🔌' },
-  { value: 'mobility_aids', label: 'Mobility Aids', icon: '♿' },
+  { value: 'groceries', label: 'Groceries / Food', icon: '' },
+  { value: 'clothing', label: 'Clothing & Wear', icon: '' },
+  { value: 'books', label: 'Books & Learning', icon: '' },
+  { value: 'household', label: 'Household Items', icon: '' },
+  { value: 'appliances', label: 'Appliances & Tools', icon: '' },
+  { value: 'mobility_aids', label: 'Mobility Aids', icon: '' },
 ];
 
 const CONDITIONS: Array<{ value: ItemCondition; label: string }> = [
@@ -45,6 +50,7 @@ const CONDITIONS: Array<{ value: ItemCondition; label: string }> = [
  * Supports donation vs loan modes, appliance specifications, and photo uploads.
  */
 export function ListingFormModal({
+  inline = false,
   existingListing,
   initialDraft,
   onPrepare,
@@ -53,61 +59,71 @@ export function ListingFormModal({
   onClose,
   onSuccess,
 }: ListingFormModalProps) {
+  const { user } = useAuth();
+  const [restored] = useState(() => inline && user ? getShareDraft(user.uid) : undefined);
+  const cleared = useRef(false);
   const me = useMe();
   const defaultArea = me.data?.profile?.areaLabel ?? 'Local Neighbourhood';
   const defaultLocation = me.data?.profile?.homeLocation;
-  const keys = useRef(createRetryKey());
-  const photoKey = useRef(crypto.randomUUID());
+  const keys = useRef(restored?.retryKeys ?? createRetryKey());
+  const photoKey = useRef(restored?.photoKey ?? crypto.randomUUID());
 
   // Form State
-  const [mode, setMode] = useState<ListingMode>(existingListing?.mode ?? initialDraft?.mode ?? 'donate');
-  const [category, setCategory] = useState<ItemCategory>(existingListing?.category ?? initialDraft?.category ?? 'household');
-  const [title, setTitle] = useState(existingListing?.title ?? initialDraft?.title ?? '');
-  const [description, setDescription] = useState(existingListing?.description ?? initialDraft?.description ?? '');
-  const [condition, setCondition] = useState<ItemCondition>(existingListing?.condition ?? initialDraft?.condition ?? 'good');
-  const [quantity, setQuantity] = useState<number>(existingListing?.stock.total ?? initialDraft?.quantity ?? 1);
+  const [mode, setMode] = useState<ListingMode>(restored?.mode ?? existingListing?.mode ?? initialDraft?.mode ?? 'donate');
+  const [category, setCategory] = useState<ItemCategory>(restored?.category ?? existingListing?.category ?? initialDraft?.category ?? 'household');
+  const [title, setTitle] = useState(restored?.title ?? existingListing?.title ?? initialDraft?.title ?? '');
+  const [description, setDescription] = useState(restored?.description ?? existingListing?.description ?? initialDraft?.description ?? '');
+  const [condition, setCondition] = useState<ItemCondition>(restored?.condition ?? existingListing?.condition ?? initialDraft?.condition ?? 'good');
+  const [quantity, setQuantity] = useState<number>(restored?.quantity ?? existingListing?.stock.total ?? initialDraft?.quantity ?? 1);
   const [areaLabel] = useState(existingListing?.location.areaLabel ?? defaultArea);
   const [pickupInstructions, setPickupInstructions] = useState(
-    existingPickupInstructions ?? 'Ring front door or message on arrival',
+    restored?.pickupInstructions ?? existingPickupInstructions ?? 'Ring front door or message on arrival',
   );
-  const [bestBefore,setBestBefore] = useState(existingListing?.bestBefore ?? '');
-  const [applianceModel,setApplianceModel] = useState(existingListing?.appliance?.model ?? '');
-  const [powerRequirement,setPowerRequirement] = useState(existingListing?.appliance?.powerRequirement ?? '');
-  const [maxLoanDays, setMaxLoanDays] = useState<number>(existingListing?.lending?.maxLoanDays ?? 7);
+  const [bestBefore,setBestBefore] = useState(restored?.bestBefore ?? existingListing?.bestBefore ?? '');
+  const [applianceModel,setApplianceModel] = useState(restored?.applianceModel ?? existingListing?.appliance?.model ?? '');
+  const [powerRequirement,setPowerRequirement] = useState(restored?.powerRequirement ?? existingListing?.appliance?.powerRequirement ?? '');
+  const [maxLoanDays, setMaxLoanDays] = useState<number>(restored?.maxLoanDays ?? existingListing?.lending?.maxLoanDays ?? 7);
 
   // Appliance specifics
   const [applianceStatus, setApplianceStatus] = useState<'working' | 'partially_working' | 'not_working' | 'unknown'>(
-    existingListing?.appliance?.workingStatus ?? 'unknown',
+    restored?.applianceStatus ?? existingListing?.appliance?.workingStatus ?? 'unknown',
   );
-  const [applianceBrand, setApplianceBrand] = useState(existingListing?.appliance?.brand ?? '');
+  const [applianceBrand, setApplianceBrand] = useState(restored?.applianceBrand ?? existingListing?.appliance?.brand ?? '');
   const [applianceWeight, setApplianceWeight] = useState(
-    existingListing?.appliance?.approxWeightKg ? String(existingListing.appliance.approxWeightKg) : '',
+    restored?.applianceWeight ?? (existingListing?.appliance?.approxWeightKg ? String(existingListing.appliance.approxWeightKg) : ''),
   );
 
-  const [dimensions,setDimensions] = useState({ width: String(existingListing?.appliance?.dimensionsCm?.width ?? ''), height: String(existingListing?.appliance?.dimensionsCm?.height ?? ''), depth: String(existingListing?.appliance?.dimensionsCm?.depth ?? '') });
-  const [floor,setFloor] = useState(String(existingListing?.appliance?.access.floorLevel ?? ''));
-  const [elevator,setElevator] = useState<boolean | null>(existingListing?.appliance?.access.elevatorAvailable ?? null);
-  const [dismantling,setDismantling] = useState<boolean | null>(existingListing?.appliance?.access.requiresDismantling ?? null);
-  const [installation,setInstallation] = useState<boolean | null>(existingListing?.appliance?.access.requiresInstallation ?? null);
-  const [helpers,setHelpers] = useState(String(existingListing?.appliance?.access.suggestedHelpers ?? ''));
-  const [accessNotes,setAccessNotes] = useState(existingListing?.appliance?.access.notes ?? '');
+  const [dimensions,setDimensions] = useState(restored?.dimensions ?? { width: String(existingListing?.appliance?.dimensionsCm?.width ?? ''), height: String(existingListing?.appliance?.dimensionsCm?.height ?? ''), depth: String(existingListing?.appliance?.dimensionsCm?.depth ?? '') });
+  const [floor,setFloor] = useState(restored?.floor ?? String(existingListing?.appliance?.access.floorLevel ?? ''));
+  const [elevator,setElevator] = useState<boolean | null>(restored?.elevator ?? existingListing?.appliance?.access.elevatorAvailable ?? null);
+  const [dismantling,setDismantling] = useState<boolean | null>(restored?.dismantling ?? existingListing?.appliance?.access.requiresDismantling ?? null);
+  const [installation,setInstallation] = useState<boolean | null>(restored?.installation ?? existingListing?.appliance?.access.requiresInstallation ?? null);
+  const [helpers,setHelpers] = useState(restored?.helpers ?? String(existingListing?.appliance?.access.suggestedHelpers ?? ''));
+  const [accessNotes,setAccessNotes] = useState(restored?.accessNotes ?? existingListing?.appliance?.access.notes ?? '');
   // Photo selection
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(restored?.photoFile ?? null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
   // Status & error tracking
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => () => { if (photoPreview) URL.revokeObjectURL(photoPreview); }, [photoPreview]);
+  useEffect(() => { const url = photoFile ? URL.createObjectURL(photoFile) : null; setPhotoPreview(url); return () => { if (url) URL.revokeObjectURL(url); }; }, [photoFile]);
+  useEffect(() => {
+    if (inline && user && !cleared.current) saveShareDraft(user.uid, { mode, category, title, description, condition, quantity, pickupInstructions, bestBefore, applianceModel, powerRequirement, maxLoanDays, applianceStatus, applianceBrand, applianceWeight, dimensions, floor, elevator, dismantling, installation, helpers, accessNotes, photoFile, retryKeys: keys.current, photoKey: photoKey.current });
+  }, [inline, user, mode, category, title, description, condition, quantity, pickupInstructions, bestBefore, applianceModel, powerRequirement, maxLoanDays, applianceStatus, applianceBrand, applianceWeight, dimensions, floor, elevator, dismantling, installation, helpers, accessNotes, photoFile]);
+  function clearDraft() { cleared.current = true; if (inline && user) removeShareDraft(user.uid); }
 
   const handlePhotoSelect = (e: ChangeEvent<HTMLInputElement>) => {
     try {
       const file = e.target.files?.[0];
       if (file) {
+        if (!(AI_LIMITS.imageMimeTypes as readonly string[]).includes(file.type) || file.size > AI_LIMITS.imageMaxBytes) {
+          setErrorMessage('Choose a JPEG, PNG or WebP photo under 4 MB.'); e.target.value = ''; return;
+        }
+        setErrorMessage(null);
         photoKey.current = crypto.randomUUID();
         setPhotoFile(file);
-        setPhotoPreview(URL.createObjectURL(file));
       }
     } catch (err) {
       console.error('[ListingFormModal] Error previewing image:', err);
@@ -214,9 +230,9 @@ export function ListingFormModal({
         }
       }
 
-      onSuccess();
+      clearDraft(); onSuccess();
     } catch (err) {
-      console.error('[ListingFormModal] Submit failed:', err);
+
       if (err instanceof ApiError && err.details && err.details.length > 0) {
         setErrorMessage(`${err.message}: ${err.details.map((d) => `${d.path} (${d.message})`).join(', ')}`);
       } else {
@@ -228,20 +244,22 @@ export function ListingFormModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-      <Card className="max-h-[90vh] w-full max-w-lg overflow-y-auto p-6 shadow-xl">
+    <FormSurface inline={inline} onClose={onClose}>
         <div className="flex items-center justify-between border-b border-stone-200 pb-3">
           <h2 className="text-xl font-bold text-stone-900">
-            {existingListing ? 'Edit Item' : 'Share or Lend an Item'}
+            {existingListing ? 'Edit item' : 'Donate / Share an item'}
           </h2>
           <button
             type="button"
+            aria-label="Close item form"
             onClick={onClose}
-            className="rounded-lg p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+            className="flex h-11 w-11 items-center justify-center rounded-lg text-stone-600 hover:bg-stone-100"
           >
-            ✕
+            <CloseIcon />
           </button>
         </div>
+
+        {inline && <p className="mt-3 text-sm text-stone-600">{restored ? 'Draft restored. ' : ''}Your draft stays here while you use the app. Refreshing or signing out clears it.</p>}
 
         {errorMessage && (
           <div className="mt-4">
@@ -252,28 +270,30 @@ export function ListingFormModal({
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           {/* Mode Switcher: Donate vs Lend */}
           <div>
-            <label className="block text-xs font-semibold text-stone-700 uppercase">Offering Mode</label>
+            <p className="block text-sm font-semibold text-stone-700">Offering</p>
             <div className="mt-1 grid grid-cols-2 gap-2 rounded-xl bg-stone-100 p-1">
               <button
                 type="button"
+                aria-pressed={mode === 'donate'}
                 onClick={() => setMode('donate')}
                 className={`rounded-lg py-2 text-sm font-semibold transition ${
-                  mode === 'donate' ? 'bg-white text-brand-800 shadow-sm' : 'text-stone-600'
+                  mode === 'donate' ? 'bg-white text-brand-800 ' : 'text-stone-600'
                 }`}
               >
-                🎁 Give away (Donation)
+                 Donate (free to keep)
               </button>
               <button
                 type="button"
+                aria-pressed={mode === 'lend'}
                 onClick={() => {
                   setMode('lend');
                   setQuantity(1);
                 }}
                 className={`rounded-lg py-2 text-sm font-semibold transition ${
-                  mode === 'lend' ? 'bg-white text-brand-800 shadow-sm' : 'text-stone-600'
+                  mode === 'lend' ? 'bg-white text-brand-800 ' : 'text-stone-600'
                 }`}
               >
-                🤝 Lend (Borrow & Return)
+                 Lend (return later)
               </button>
             </div>
           </div>
@@ -294,11 +314,11 @@ export function ListingFormModal({
 <select
 id="listing-field-0"                 value={category}
                 onChange={(e) => setCategory(e.target.value as ItemCategory)}
-                className="mt-1 block min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-700 focus:outline-none"
+                className="mt-1 block min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm  focus:border-brand-700 focus:outline-none"
               >
                 {CATEGORIES.map((c) => (
                   <option key={c.value} value={c.value}>
-                    {c.icon} {c.label}
+                    {c.label}
                   </option>
                 ))}
               </select>
@@ -309,7 +329,7 @@ id="listing-field-0"                 value={category}
 <select
 id="listing-field-1"                 value={condition}
                 onChange={(e) => setCondition(e.target.value as ItemCondition)}
-                className="mt-1 block min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-700 focus:outline-none"
+                className="mt-1 block min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm  focus:border-brand-700 focus:outline-none"
               >
                 {CONDITIONS.map((c) => (
                   <option key={c.value} value={c.value}>
@@ -350,14 +370,14 @@ id="listing-field-1"                 value={condition}
           {/* Appliance Specifics */}
           {category === 'appliances' && (
             <div className="rounded-xl border border-stone-200 bg-stone-50/70 p-3.5 space-y-3">
-              <p className="text-xs font-bold text-stone-700 uppercase">⚡ Appliance Specifications</p>
+              <p className="text-sm font-bold text-stone-700"> Appliance Specifications</p>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-medium text-stone-700" htmlFor="listing-field-2">Working Status</label>
+                  <label className="block text-sm font-medium text-stone-700" htmlFor="listing-field-2">Working Status</label>
 <select
 id="listing-field-2"                     value={applianceStatus}
                     onChange={(e) => setApplianceStatus(e.target.value as typeof applianceStatus)}
-                    className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs"
+                    className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-sm"
                   >
                     <option value="working">Fully Working</option>
                     <option value="partially_working">Partially Working</option>
@@ -366,24 +386,24 @@ id="listing-field-2"                     value={applianceStatus}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-stone-700" htmlFor="listing-field-3">Brand / Maker</label>
+                  <label className="block text-sm font-medium text-stone-700" htmlFor="listing-field-3">Brand / Maker</label>
 <input
 id="listing-field-3"                     type="text"
                     placeholder="e.g. Philips, Cosmos"
                     value={applianceBrand}
                     onChange={(e) => setApplianceBrand(e.target.value)}
-                    className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs"
+                    className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-sm"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-stone-700" htmlFor="listing-field-4">Approx. Weight (kg)</label>
+                <label className="block text-sm font-medium text-stone-700" htmlFor="listing-field-4">Approx. Weight (kg)</label>
 <input
 id="listing-field-4"                   type="number"
                   placeholder="e.g. 5"
                   value={applianceWeight}
                   onChange={(e) => setApplianceWeight(e.target.value)}
-                  className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs"
+                  className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-sm"
                 />
               </div>
               <div className="grid grid-cols-2 gap-2"><TextField label="Model, if known" maxLength={80} value={applianceModel} onChange={e => setApplianceModel(e.target.value)} /><TextField label="Power requirement, if known" maxLength={80} value={powerRequirement} onChange={e => setPowerRequirement(e.target.value)} /></div>
@@ -407,7 +427,7 @@ id="listing-field-5"               rows={3}
               placeholder="Tell neighbours more about this item, usage tips, or reasons for sharing..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="mt-1 block w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-700 focus:outline-none"
+              className="mt-1 block w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm  focus:border-brand-700 focus:outline-none"
             />
           </div>
 
@@ -421,7 +441,7 @@ id="listing-field-6"               rows={2}
               placeholder="Private details shown ONLY to the confirmed recipient (e.g. House No. 12, ring bell twice)"
               value={pickupInstructions}
               onChange={(e) => setPickupInstructions(e.target.value)}
-              className="mt-1 block w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-700 focus:outline-none"
+              className="mt-1 block w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm  focus:border-brand-700 focus:outline-none"
               required
             />
           </div>
@@ -433,18 +453,20 @@ id="listing-field-6"               rows={2}
 id="listing-field-7"               type="file"
               accept="image/png, image/jpeg, image/webp"
               onChange={handlePhotoSelect}
-              className="mt-1 block w-full text-xs text-stone-600 file:mr-3 file:rounded-xl file:border-0 file:bg-stone-100 file:px-3 file:py-2 file:text-xs file:font-semibold hover:file:bg-stone-200"
+              className="mt-1 block w-full text-sm text-stone-600 file:mr-3 file:rounded-xl file:border-0 file:bg-stone-100 file:px-3 file:py-2 file:text-sm file:font-semibold hover:file:bg-stone-200"
             />
+            <p className="mt-1 text-sm text-stone-600">JPEG, PNG or WebP, up to 4 MB. {onPrepare ? 'Attach photos in Ask before preparing this listing.' : 'Choose a clear photo of the actual item.'}</p>
             {photoPreview && (
               <div className="mt-2 flex items-center gap-2">
                 <img src={photoPreview} alt="Preview" className="h-16 w-16 rounded-xl object-cover ring-1 ring-stone-300" />
-                <span className="text-xs text-stone-500">Ready to upload on save</span>
+                <span className="text-sm text-stone-500">Ready to upload on save</span>
               </div>
             )}
           </div>
 
           {/* Action Buttons */}
           <div className="flex justify-end gap-2 pt-2">
+            {inline && <Button type="button" variant="ghost" disabled={isSubmitting} onClick={() => { clearDraft(); onClose(); }}>Discard draft</Button>}
             <Button type="button" variant="ghost" onClick={onClose} disabled={isSubmitting}>
               Cancel
             </Button>
@@ -453,7 +475,6 @@ id="listing-field-7"               type="file"
             </Button>
           </div>
         </form>
-      </Card>
-    </div>
+    </FormSurface>
   );
 }

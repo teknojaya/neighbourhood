@@ -11,6 +11,8 @@ import {
 } from 'firebase/auth';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { getFirebaseAuth } from '../lib/firebase';
+import { clearTextDrafts } from '../lib/textDrafts';
+import { clearShareDrafts } from '../features/listings/shareDraftStore';
 
 interface AuthState {
   /** Firebase user; `undefined` while the initial session is restored. */
@@ -35,7 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return onIdTokenChanged(auth, (u) => {
       setUser((prev) => {
         // Drop all cached user data whenever the signed-in identity changes.
-        if (prev?.uid !== u?.uid) queryClient.clear();
+        if (prev?.uid !== u?.uid) { queryClient.clear(); clearTextDrafts(); clearShareDrafts(); }
         return u;
       });
     });
@@ -69,6 +71,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [auth]);
 
   const signOut = useCallback(async () => {
+    clearTextDrafts();
+    clearShareDrafts();
     if (auth) await firebaseSignOut(auth);
     queryClient.clear();
   }, [auth, queryClient]);

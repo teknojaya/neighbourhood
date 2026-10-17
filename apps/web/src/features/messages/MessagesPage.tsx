@@ -1,10 +1,11 @@
 import { ApiRoutes, ConversationPageSchema, ConversationSchema, MessagePageSchema, MessageSchema } from '@neighbourhood/shared';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { z } from 'zod';
 import { useMe } from '../../auth/useMe';
-import { Alert, Button, Card } from '../../components/ui';
+import { Alert, Button, Card, PageHeading, Skeleton } from '../../components/ui';
+import { useTextDraft } from '../../lib/textDrafts';
 import { t } from '../../i18n';
 import { api } from '../../lib/api';
 import { useOnline } from '../../lib/useOnline';
@@ -20,16 +21,16 @@ export function MessagesPage() {
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
-  return <div className="space-y-4">
-    <h1 className="text-2xl font-bold">{t('module.messages.title')}</h1>
+  return <div className={selected ? 'conversation-page mx-auto w-full max-w-3xl' : 'space-y-4'}>
+    <PageHeading title="Messages" />
     {selected ? <>
       <Link to="/messages" className="inline-block min-h-11 py-3 text-sm font-semibold text-brand-800 underline">{t('messages.back')}</Link>
       <Thread key={selected} id={selected} />
     </> : <>
       <p className="text-sm text-stone-600">{t('messages.intro')}</p>
-      {list.isPending && <p role="status">{t('common.loading')}</p>}
+      {list.isPending && <Skeleton />}
       {list.isError && <Alert tone="error">{featureError(list.error)} <Button variant="ghost" onClick={() => void list.refetch()}>{t('common.retry')}</Button></Alert>}
-      {list.isSuccess && items.length === 0 && <Card>{t('messages.empty')}</Card>}
+      {list.isSuccess && items.length === 0 && <Card className="space-y-2"><h2 className="font-semibold">Your neighbour conversations live here</h2><p className="text-sm text-stone-600">A chat opens after a request is approved, so you can arrange pickup and return.</p><Link className="inline-flex min-h-11 items-center text-sm font-semibold text-brand-800 underline" to="/explore">Find something nearby</Link></Card>}
       {items.map((item) => <Link key={item.id} to={`/messages?conversation=${item.id}`} className="block">
         <Card className="flex items-center justify-between gap-3">
           <div className="min-w-0"><h2 className="break-words font-semibold">{item.listingTitle ?? t('activity.item')}</h2><p className="text-xs text-stone-500">{item.lastMessageAt ? new Date(item.lastMessageAt).toLocaleString() : t('messages.noMessages')}</p></div>
@@ -45,7 +46,8 @@ function Thread({ id }: { id: string }) {
   const me = useMe();
   const online = useOnline();
   const qc = useQueryClient();
-  const [text, setText] = useState('');
+  const [text, setText] = useTextDraft(`messages:${id}`);
+  const scroll = useRef<HTMLDivElement>(null);
   const keys = useRef(createRetryKey());
   const lastRead = useRef<string | null>(null);
   const detail = useQuery({
@@ -61,7 +63,7 @@ function Thread({ id }: { id: string }) {
   const newest = messages.data?.pages[0]?.items[0]?.id;
   const { mutate: markRead, ...read } = useMutation({
     mutationFn: (throughMessageId: string) => api(`${ApiRoutes.conversations}/${encodeURIComponent(id)}/read`, { method: 'POST', body: { throughMessageId }, schema: z.null() }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['conversations'] }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['notifications', 'unread'] }); return qc.invalidateQueries({ queryKey: ['conversations'] }); },
   });
   useEffect(() => {
     if (online && newest && lastRead.current !== newest) {
@@ -80,10 +82,12 @@ function Thread({ id }: { id: string }) {
     },
   });
   const items = [...(messages.data?.pages.flatMap((p) => p.items) ?? [])].reverse();
-  return <div className="space-y-3">
+  useEffect(() => { const box = scroll.current; if (box && box.scrollHeight - box.scrollTop - box.clientHeight < 220) box.scrollTop = box.scrollHeight; }, [items.length]);
+  return <div className="conversation-page">
     {detail.data?.listingTitle && <h2 className="font-semibold">{detail.data.listingTitle}</h2>}
+    <div ref={scroll} className="conversation-scroll space-y-3 pr-1">
     {detail.isError && <Alert tone="error">{featureError(detail.error)}</Alert>}
-    {messages.isPending && <p role="status">{t('common.loading')}</p>}
+    {messages.isPending && <Skeleton cards={2} />}
     {messages.isError && <Alert tone="error">{featureError(messages.error)} <Button variant="ghost" onClick={() => void messages.refetch()}>{t('common.retry')}</Button></Alert>}
     {messages.hasNextPage && <Button variant="secondary" disabled={messages.isFetchingNextPage} onClick={() => void messages.fetchNextPage()}>{t('messages.older')}</Button>}
     {messages.isSuccess && items.length === 0 && <Card>{t('messages.start')}</Card>}
@@ -95,9 +99,10 @@ function Thread({ id }: { id: string }) {
     </ol>
     {read.isError && <Alert tone="error">{t('messages.readFailed')} <Button variant="ghost" onClick={() => newest && markRead(newest)}>{t('common.retry')}</Button></Alert>}
     {detail.data?.closed && <Alert>{t('messages.closed')}</Alert>}
-    {messages.isSuccess && !closed && <form className="space-y-2 rounded-2xl bg-white p-3 ring-1 ring-stone-200" onSubmit={(e) => { e.preventDefault(); if (text.trim()) send.mutate(); }}>
+    </div>
+    {messages.isSuccess && !closed && <form className="composer space-y-2" onSubmit={(e) => { e.preventDefault(); if (text.trim() && !send.isPending && online) send.mutate(); }}>
       <label className="block text-sm font-medium" htmlFor="message-body">{t('messages.compose')}</label>
-      <textarea id="message-body" className="min-h-24 w-full rounded-xl border border-stone-300 p-3" value={text} onChange={(e) => setText(e.target.value)} maxLength={2000} required disabled={send.isPending} />
+      <textarea id="message-body" rows={2} className="w-full resize-none text-base" value={text} onChange={(e) => setText(e.target.value)} maxLength={2000} required disabled={send.isPending} />
       <p className="text-xs text-stone-500">{t('messages.privacy')}</p>
       {send.isError && <Alert tone="error">{featureError(send.error)}</Alert>}
       <Button type="submit" className="w-full" disabled={!online || send.isPending || !text.trim()}>{send.isPending ? t('common.saving') : t('messages.send')}</Button>

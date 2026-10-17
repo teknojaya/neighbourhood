@@ -39,6 +39,8 @@ key. See the [integration runbook](docs/integration-handoff.md).
 | `npm run check` | Types, lint, unit tests, API/PWA production build |
 | `npm run test:db` | Isolated PostgreSQL permission, stock and concurrency tests |
 | `npm run smoke:marketplace` | Real Gemini/bucket and two-user mobile journey; local disposable fixtures only |
+| `npm run smoke:ui` | Local demo navigation, draft recovery, loading/empty states and responsive captures |
+| `npm run smoke:unread` | Authorized unread counts and header read-state updates; disposable local fixtures |
 | `npm run smoke:ask -w @neighbourhood/api` | Real tools, private images, confirmation and history |
 | `npm run maintenance -w @neighbourhood/api` | Request expiry, push outbox and orphan photo cleanup |
 | `npm run migrate:photos -w @neighbourhood/api` | Import referenced legacy local photos into the configured bucket |
@@ -61,6 +63,11 @@ and `SMOKE_SCREENSHOT_DIR` for mobile captures. They remove only their fixtures.
 [Architecture](docs/architecture.md) · [API](docs/api-contracts.md) ·
 [Status](docs/implementation-status.md) · [Runbook](docs/integration-handoff.md) ·
 [Acceptance checklist](docs/integration-checklist.md).
+
+The UI branch's scope and validation are recorded in the
+[UI handoff](docs/ui-enhancement-handoff.md), with product context in
+[PRODUCT.md](apps/web/PRODUCT.md) and the documented system in
+[DESIGN.md](apps/web/DESIGN.md).
 
 Deploy using the runbook: migrate PostgreSQL before serving the new app,
 configure a private Firebase bucket, shared URL-signing secret and provider

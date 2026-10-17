@@ -9,6 +9,7 @@ import { HomePage } from './features/home/HomePage';
 import { ExplorePage } from './features/listings/ExplorePage';
 import { ProductCategoriesPage } from './features/categories/ProductCategoriesPage';
 import { ListingDetailPage } from './features/listings/ListingDetailPage';
+import { SharePage } from './features/listings/SharePage';
 import { MessagesPage } from './features/messages/MessagesPage';
 import { AskPage } from './features/ask/AskPage';
 import { SavedNeedsPage } from './features/needs/SavedNeedsPage';
@@ -36,6 +37,7 @@ const router = createBrowserRouter([
           { path: 'needs/saved', element: <SavedNeedsPage /> },
           { path: 'explore', element: <ExplorePage /> },
           { path: 'listings/:id', element: <ListingDetailPage /> },
+          { path: 'share', element: <SharePage /> },
           { path: 'activity', element: <ActivityPage /> },
           { path: 'communities', element: <CommunitiesPage /> },
           { path: 'messages', element: <MessagesPage /> },

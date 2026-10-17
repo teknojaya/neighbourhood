@@ -4,6 +4,8 @@
   --color-brand-50: #f0fdfa;
   --color-brand-100: #ccfbf1;
   --color-brand-200: #99f6e4;
+  --color-brand-600: #0d9488;
+  --color-brand-500: #14b8a6;
   --color-brand-700: #0f766e;
   --color-brand-800: #115e59;
   --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', sans-serif;
@@ -11,4 +13,34 @@
 
 html {
   -webkit-tap-highlight-color: transparent;
+  background: #fafaf9;
+  color: #1c1917;
+  scrollbar-color: #a8a29e #fafaf9;
+  scrollbar-width: thin;
 }
+
+body { margin: 0; font-size: 16px; line-height: 1.5; }
+* { caret-color: #0f766e; }
+::selection { background: #ccfbf1; color: #134e4a; }
+::placeholder { color: #78716c; opacity: 1; }
+:focus-visible { outline: 2px solid #0f766e; outline-offset: 3px; }
+a { text-underline-offset: 3px; }
+button, summary, select, label:has(input[type='file']) { touch-action: manipulation; }
+input, select, textarea { font-size: 16px; }
+input[type='checkbox'], input[type='radio'] { accent-color: #0f766e; }
+input[type='checkbox'] { width: 18px; height: 18px; flex-shrink: 0; margin-top: 2px; }
+time, input[type='number'] { font-variant-numeric: tabular-nums; }
+h1, h2, h3 { text-wrap: balance; }
+.surface .surface { border: 0; border-radius: 0; padding-inline: 0; background: transparent; }
+.app-main > div:not(.conversation-page) { max-width: 48rem; margin-inline: auto; }
+.app-main > .discovery-page { max-width: none !important; }
+.conversation-shell { height: var(--app-height, 100dvh); min-height: 0; }
+.conversation-page { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 12px; }
+.conversation-scroll { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+.composer { flex-shrink: 0; max-height: 45dvh; overflow-y: auto; border: 1px solid #d6d3d1; border-radius: 16px; background: white; padding: 12px; }
+.composer textarea { border: 0; padding: 4px; border-radius: 4px; }
+.composer textarea:focus { outline: 0; }
+.composer:focus-within { border-color: #0f766e; }
+.item-card { transition: border-color 150ms ease-out; }
+.item-card:hover { border-color: #0f766e; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }

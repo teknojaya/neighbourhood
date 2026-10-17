@@ -69,6 +69,24 @@ afterAll(async () => {
 });
 
 describe('donation transactions against PostgreSQL', () => {
+  it('counts only the viewer’s unread data across pagination and respects message read watermarks', async () => {
+    const created = (await service.create(recipient.id, randomUUID(), { listingId, quantity: 1, message: 'Initial unread request' })).body;
+    await db.notification.createMany({ data: Array.from({ length: 25 }, () => ({ userId: owner.id, type: 'message_received', title: 'Test unread update', body: 'Fixture update' })) });
+    const summary = () => request(app).get('/api/v1/notifications/unread').set('Authorization', bearer(owner.firebaseUid));
+    expect((await summary().expect(200)).body).toEqual({ messages: 1, updates: 26 });
+    expect((await request(app).get('/api/v1/notifications?limit=1').set('Authorization', bearer(owner.firebaseUid)).expect(200)).body.items).toHaveLength(1);
+    expect((await request(app).get('/api/v1/notifications/unread?userId=' + owner.id).set('Authorization', bearer(other.firebaseUid)).expect(200)).body).toEqual({ messages: 0, updates: 0 });
+    await request(app).get('/api/v1/notifications/unread').expect(401);
+    const message = await db.message.findFirstOrThrow({ where: { conversationId: created.conversationId! } });
+    await request(app).post(`/api/v1/conversations/${created.conversationId}/read`).set('Authorization', bearer(owner.firebaseUid)).send({ throughMessageId: message.id }).expect(204);
+    const notification = await db.notification.findFirstOrThrow({ where: { userId: owner.id } });
+    await request(app).post(`/api/v1/notifications/${notification.id}/read`).set('Authorization', bearer(owner.firebaseUid)).expect(200);
+    expect((await summary().expect(200)).body).toEqual({ messages: 0, updates: 25 });
+    await conversations.send(owner.id, randomUUID(), created.conversationId!, 'Own messages do not count as unread');
+    expect((await summary().expect(200)).body.messages).toBe(0);
+    await conversations.send(recipient.id, randomUUID(), created.conversationId!, 'A newer unread reply');
+    expect((await summary().expect(200)).body.messages).toBe(1);
+  });
   it('creates a request, private conversation and notification atomically through HTTP', async () => {
     const response = await request(app).post('/api/v1/requests').set('Authorization', bearer(recipient.firebaseUid))
       .set('Idempotency-Key', randomUUID()).send({ listingId, quantity: 1, message: 'Can I collect tomorrow?' }).expect(201);

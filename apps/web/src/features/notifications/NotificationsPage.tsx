@@ -2,7 +2,7 @@ import { ApiRoutes, NotificationPageSchema, NotificationSchema } from '@neighbou
 import { PushPreferences } from './PushPreferences';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
-import { Alert, Button, Card } from '../../components/ui';
+import { Alert, Button, Card, PageHeading, Skeleton } from '../../components/ui';
 import { t } from '../../i18n';
 import { api } from '../../lib/api';
 import { useOnline } from '../../lib/useOnline';
@@ -22,14 +22,13 @@ export function NotificationsPage() {
   });
   const items = inbox.data?.pages.flatMap((p) => p.items) ?? [];
   return <div className="space-y-4">
-    <h1 className="text-2xl font-bold">{t('module.notifications.title')}</h1>
-    <PushPreferences />
-    <p className="text-sm text-stone-600">{t('module.notifications.body')}</p>
-    {inbox.isPending && <p role="status">{t('common.loading')}</p>}
+    <PageHeading title="Updates">Requests, handovers and community updates in one place.</PageHeading>
+    {inbox.isPending && <Skeleton />}
     {inbox.isError && <Alert tone="error">{featureError(inbox.error)} <Button variant="ghost" onClick={() => void inbox.refetch()}>{t('common.retry')}</Button></Alert>}
     {read.isError && <Alert tone="error">{featureError(read.error)}</Alert>}
     {inbox.isSuccess && items.length === 0 && <Card>{t('notifications.empty')}</Card>}
-    {items.map((item) => <Card key={item.id} className={item.readAt ? 'space-y-2' : 'space-y-2 border-l-4 border-brand-700'}>
+    {[...items].sort((a,b) => Number(Boolean(a.readAt)) - Number(Boolean(b.readAt))).map((item) => <Card key={item.id} className={item.readAt ? 'space-y-2' : 'space-y-2 bg-brand-50'}>
+      {!item.readAt && <p className="text-sm font-semibold text-brand-800">Unread</p>}
       <h2 className="font-semibold">{item.title}</h2>
       <p className="text-sm text-stone-600">{item.body}</p>
       <time dateTime={item.createdAt} className="block text-xs text-stone-500">{new Date(item.createdAt).toLocaleString()}</time>
@@ -39,5 +38,6 @@ export function NotificationsPage() {
       </div>
     </Card>)}
     {inbox.hasNextPage && <Button variant="secondary" className="w-full" disabled={inbox.isFetchingNextPage} onClick={() => void inbox.fetchNextPage()}>{t('common.loadMore')}</Button>}
+    <details className="border-t border-stone-200 pt-3"><summary className="cursor-pointer py-3 text-sm font-semibold">Device notification settings</summary><PushPreferences /></details>
   </div>;
 }

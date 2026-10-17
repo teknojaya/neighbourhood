@@ -41,7 +41,7 @@ export function PrivatePhoto({ sessionId, attachment }: { sessionId: string; att
 export function AskCard({ part, sessionId, onEditDraft }: { part: AskPart; sessionId: string; onEditDraft(): void }) {
   switch (part.kind) {
     case 'matches': return <Card className="space-y-3"><h3 className="font-semibold">Matches for your saved need</h3>{part.items.length === 0 && <p>No matches nearby yet.</p>}{part.items.map(item => <Link className="block border-t py-3" key={item.listing.id} to={'/listings/' + item.listing.id}><strong>{item.listing.title}</strong><p className="text-sm">{item.reason}</p>{item.missingInfo.map((info,i) => <p className="text-xs text-stone-600" key={i}>{info}</p>)}</Link>)}</Card>;
-    case 'listings': return <Card className="space-y-3"><h3 className="font-semibold">Nearby items</h3>{part.items.length === 0 && <p>No matching items found. Try a wider radius or a shorter item name.</p>}{part.items.map(item => <Link key={item.id} to={'/listings/' + item.id} className="flex min-h-16 gap-3 border-b py-3">{item.photos[0]?.url && <img className="h-16 w-16 rounded-xl object-cover" src={item.photos[0].url} alt="" />}<div className="min-w-0"><strong className="break-words">{item.title}</strong><p className="text-sm">{item.mode} · {item.stock.total - item.stock.reserved - item.stock.collected} available</p><p className="text-xs">{item.location.areaLabel}{item.location.distanceKm !== undefined ? ' · ' + item.location.distanceKm + ' km' : ''}</p></div></Link>)}</Card>;
+    case 'listings': return <Card className="space-y-3"><h3 className="font-semibold">Nearby items</h3>{part.items.length === 0 && <p>No matching items found. Try a wider radius or a shorter item name.</p>}{part.items.map(item => <Link key={item.id} to={'/listings/' + item.id} className="flex min-h-16 gap-3 border-b py-3">{item.photos[0]?.url && <img className="h-16 w-16 rounded-xl object-cover" src={item.photos[0].url} alt="" />}<div className="min-w-0"><strong className="break-words">{item.title}</strong><p className="text-sm">{item.mode === 'donate' ? `Free to keep · ${item.stock.total - item.stock.reserved - item.stock.collected} available` : 'Borrow & return · choose dates'}</p><p className="text-xs">{item.location.areaLabel}{item.location.distanceKm !== undefined ? ' · ' + item.location.distanceKm + ' km' : ''}</p></div></Link>)}</Card>;
     case 'loans': return <Card>{part.items.length === 0 && <p>No loans yet.</p>}{part.items.map(item => <Link className="block py-3" key={item.id} to={'/activity?loan=' + item.id}>{item.listingTitle} · {item.status}<p className="text-sm">{item.startDate} → {item.endDate}{item.overdue ? ' · Overdue' : ''}</p></Link>)}</Card>;
     case 'communities': return <Card>{part.items.map(item => <div key={item.id}><Link className="block py-3" to={'/communities?community=' + item.id}><strong>{item.name}</strong><p>{item.areaLabel} · {item.memberCount} members</p></Link><PointDraft communityId={item.id} sessionId={sessionId} /></div>)}</Card>;
     case 'points': return <Card>{part.items.map(item => <Link className="block py-3" key={item.id} to={'/communities?point=' + item.id}><strong>{item.name}</strong><p>{item.publicAddress ?? item.location.areaLabel}</p></Link>)}</Card>;
@@ -101,6 +101,7 @@ function ActionCard({ action, sessionId }: { action: AskAction; sessionId: strin
       void queryClient.invalidateQueries({ queryKey: ['saved-needs'] });
       void queryClient.invalidateQueries({ queryKey: ['requests'] });
       void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      void queryClient.invalidateQueries({ queryKey: ['notifications'] });
       void queryClient.invalidateQueries({ queryKey: ['loans'] });
       void queryClient.invalidateQueries({ queryKey: ['my-listings'] });
     },
@@ -108,7 +109,7 @@ function ActionCard({ action, sessionId }: { action: AskAction; sessionId: strin
   const isMarketplaceHandover = action.payload.kind === 'marketplace' && ((action.payload.action.operation === 'loan_transition' && ['checked_out', 'returned'].includes(action.payload.action.body.to)) || action.payload.action.operation === 'deposit_review' || action.payload.action.operation === 'stock_adjust');
   const isHandover = isMarketplaceHandover || action.payload.kind === 'transition_request' && action.payload.body.to === 'collected';
   const pending = action.status === 'pending';
-  return <Card className="space-y-3 border-l-4 border-brand-700">
+  return <Card className="space-y-3 border-brand-200 bg-brand-50">
     <h3 className="font-semibold">{action.payload.kind === 'marketplace' ? marketplaceTitles[action.payload.action.operation] : t(`ask.action.${action.payload.kind}`)}</h3>
     <p className="break-words text-sm">{action.summary}</p>
     {action.payload.kind === 'marketplace' && <MarketplacePreview action={action.payload.action} />}

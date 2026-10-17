@@ -13,6 +13,8 @@
     "apps/web"
   ],
   "scripts": {
+    "smoke:ui": "node scripts/smoke-ui.mjs",
+    "smoke:unread": "node --env-file-if-exists=apps/api/.env --import tsx scripts/smoke-unread.mjs",
     "smoke:marketplace": "node --env-file-if-exists=apps/api/.env --import tsx scripts/smoke-marketplace.mjs",
     "build:shared": "npm run build -w @neighbourhood/shared",
     "dev": "npm run build:shared && concurrently -k -n shared,api,web -c gray,blue,green \"npm run dev -w @neighbourhood/shared\" \"npm run dev -w @neighbourhood/api\" \"npm run dev -w @neighbourhood/web\"",

@@ -74,6 +74,8 @@ export const NotificationSchema = z.object({
 });
 export type Notification = z.infer<typeof NotificationSchema>;
 export const NotificationPageSchema = pageOf(NotificationSchema);
+/** Authorized global counts, independent of inbox/conversation pagination. */
+export const UnreadSummarySchema = z.object({ messages: z.number().int().nonnegative(), updates: z.number().int().nonnegative() });
 
 /** POST /api/v1/notifications/push-tokens — explicit user opt-in only. */
 export const RegisterPushTokenBodySchema = z.strictObject({

@@ -18,11 +18,13 @@ use cursor pagination where defined by the shared schema.
 | Inventory | Deposit propose/list/review, point inventory, reasoned adjustments and audit |
 | Needs | List/detail/create/delete and `GET /needs/:id/matches` |
 | Chat | Participant conversations, paged messages, send and read markers |
-| Notifications | Inbox/read, push-token register/remove |
+| Notifications | Inbox/read, `GET /notifications/unread` global authorized counts, push-token register/remove |
 | AI | Status, needs extraction, owned-photo listing draft and owned-need match explanations |
 | Ask | Status, sessions, paged history, turns/runs/stop, private attachments, UI proposals and actions |
 
 Important integration contracts:
+
+- `GET /notifications/unread`: `{ messages, updates }` for the signed-in account only. Message counts exclude the viewer's own messages and respect each participant's read watermark. Update counts include all unread inbox entries, independent of pagination. No migration is required.
 
 - `POST /ai/listing-draft`: `{ sessionId, attachmentId, hint? }`; the API reads
   the caller's normalized session image. No arbitrary URL fetch.

@@ -43,7 +43,7 @@ async function mobile(who) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const page = await context.newPage(); const errors = []; page.on('pageerror', error => errors.push(error.name));
   // Route the test browser to its dedicated API, leaving any user's dev server alone.
-  await page.route('**/api/v1/**', async route => { const source = new URL(route.request().url()); const response = await route.fetch({ url: new URL(source.pathname + source.search, base).href }); await route.fulfill({ response }); });
+  await page.route('**/api/v1/**', async route => { try { const source = new URL(route.request().url()); const response = await route.fetch({ url: new URL(source.pathname + source.search, base).href }); await route.fulfill({ response }); } catch { await route.abort().catch(() => undefined); } });
   await page.goto(new URL('/login', web).href);
   await page.evaluate(async custom => { const { getFirebaseAuth } = await import('/src/lib/firebase.ts'); const { signInWithCustomToken } = await import('/node_modules/.vite/deps/firebase_auth.js'); await signInWithCustomToken(getFirebaseAuth(), custom); }, who.custom);
   await page.waitForURL(url => !url.pathname.startsWith('/login'));
@@ -57,24 +57,39 @@ try {
   phase = 'mobile sign-in';
   const donor = await mobile(owner), recipient = await mobile(neighbour);
   phase = 'mobile publication';
-  await donor.page.goto(new URL('/activity', web).href);
-  await donor.page.getByRole('button', { name: 'Share an item', exact: true }).click();
+  await donor.page.goto(web.href);
+  await donor.page.getByRole('link', { name: 'Donate / Share', exact: true }).click();
+  await donor.page.waitForURL(url => url.pathname === '/share');
   const title = 'Smoke picture books ' + randomUUID().slice(0, 6);
   await donor.page.getByLabel('Title', { exact: false }).fill(title);
   await donor.page.getByPlaceholder('Tell neighbours more').fill('Synthetic test books for the complete donation flow.');
   await donor.page.getByRole('button', { name: 'Publish Listing', exact: true }).click();
   await donor.page.getByRole('link', { name: new RegExp(title) }).first().waitFor();
   const listing = (await api(owner, '/listings/mine')).items.find(item => item.title === title); assert(listing);
+  await donor.page.getByRole('link', { name: 'Donate / Share', exact: true }).click();
+  assert.equal(await donor.page.getByLabel('Title', { exact: false }).inputValue(), '', 'Successful publication retained a stale draft');
+  await donor.page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  assert.equal(new URL(donor.page.url()).searchParams.get('tab'), 'giving', 'Share cancel lost Activity origin');
   const photo = await sharp({ create: { width: 96, height: 96, channels: 3, background: 'red' } }).png().toBuffer();
   const image = await api(owner, `/listings/${listing.id}/photos`, 'POST', photo);
   assert(image.photoId);
   phase = 'real Ask search';
-  const session = await api(neighbour, '/ask/sessions', 'POST', { clientId: randomUUID() });
-  const run = await api(neighbour, `/ask/sessions/${session.id}/messages`, 'POST', { clientMessageId: randomUUID(), text: `Find nearby items with the exact search keyword "${title.split(' ').at(-1)}". Use search_listings.`, attachmentIds: [] });
+  await recipient.page.goto(new URL('/needs', web).href);
+  await recipient.page.getByLabel('Message NeighbourHood', { exact: true }).waitFor();
+  assert.equal((await api(neighbour, '/ask/sessions')).items.length, 0, 'Opening Ask must not create a session');
+  await recipient.page.getByRole('button', { name: 'New chat', exact: true }).click();
+  await recipient.page.getByRole('button', { name: 'Find an item', exact: true }).click();
+  assert.equal((await api(neighbour, '/ask/sessions')).items.length, 0, 'Starters must not create empty sessions');
+  await recipient.page.getByLabel('Message NeighbourHood', { exact: true }).fill(`Find nearby items with the exact search keyword "${title.split(' ').at(-1)}". Use search_listings.`);
+  const firstReply = recipient.page.waitForResponse(r => /\/ask\/sessions\/[^/]+\/messages$/.test(new URL(r.url()).pathname) && r.request().method() === 'POST', { timeout: 90000 });
+  await recipient.page.getByRole('button', { name: 'Send', exact: true }).click();
+  await recipient.page.waitForURL(url => url.searchParams.has('chat'));
+  const session = { id: new URL(recipient.page.url()).searchParams.get('chat') };
+  const run = await (await firstReply).json();
   assert.equal(run.status, 'completed', run.errorCode ?? 'run failed');
   const detail = await api(neighbour, `/ask/sessions/${session.id}`);
   assert(detail.messages.items.some(m => m.parts.some(p => p.kind === 'listings' && p.items.some(item => item.id === listing.id))));
-  report('PASS real Gemini grounded discovery of a live database listing');
+  report('PASS immediate Ask composer, no empty session creation, first-send session and real Gemini discovery');
 
   phase = 'real extraction and saved-need matching';
   const extracted = await api(neighbour, '/ai/needs/extract', 'POST', { text: 'I need one donated picture book for a child.' });
@@ -96,8 +111,12 @@ try {
   report('PASS real typed marketplace proposal without an unconfirmed write');
 
   phase = 'photo to reviewed Ask publication';
-  const photoSession = await api(owner, '/ask/sessions', 'POST', { clientId: randomUUID() });
-  const attachment = await api(owner, `/ask/sessions/${photoSession.id}/attachments`, 'POST', photo);
+  await donor.page.goto(new URL('/needs', web).href);
+  const uploaded = donor.page.waitForResponse(r => /\/ask\/sessions\/[^/]+\/attachments$/.test(new URL(r.url()).pathname) && r.request().method() === 'POST');
+  await donor.page.getByLabel('Add photo', { exact: true }).setInputFiles({ name: 'synthetic-red-test.png', mimeType: 'image/png', buffer: photo });
+  await donor.page.waitForURL(url => url.searchParams.has('chat'));
+  const photoSession = { id: new URL(donor.page.url()).searchParams.get('chat') };
+  const attachment = await (await uploaded).json();
   const draftTitle = 'Smoke red picture ' + randomUUID().slice(0, 6);
   const draftRun = await api(owner, `/ask/sessions/${photoSession.id}/messages`, 'POST', { clientMessageId: randomUUID(), text: `Use draft_listing to prepare title "${draftTitle}", category books, mode donate, condition good, quantity 1, description "Synthetic red picture for a donation test". The attached image is a test photo.`, attachmentIds: [attachment.id] });
   assert.equal(draftRun.status, 'completed', draftRun.errorCode ?? 'draft failed');
@@ -132,7 +151,7 @@ try {
   await donor.page.getByRole('button', { name: 'Confirm', exact: true }).first().click();
   await donor.page.getByText('Ready to collect', { exact: true }).first().waitFor();
   phase = 'pickup, message and collection';
-  await recipient.page.goto(new URL('/listings/' + listing.id, web).href); await recipient.page.getByRole('button', { name: 'Approved pickup details' }).click();
+  await recipient.page.goto(new URL('/listings/' + listing.id, web).href); await recipient.page.getByText('Already approved? View pickup details', { exact: true }).click();
   await recipient.page.getByText('Ring front door or message on arrival', { exact: true }).waitFor();
   const req = await api(neighbour, '/requests/' + requestId);
   await api(neighbour, `/conversations/${req.conversationId}/messages`, 'POST', { body: 'I can collect today at five.' });
@@ -171,6 +190,8 @@ try {
   await donor.page.getByLabel('Area', { exact: true }).fill('Smoke neighbourhood');
   await donor.page.getByLabel('Partner name', { exact: true }).fill('Smoke partner');
   await donor.page.getByLabel('Exact point address', { exact: true }).fill('Synthetic private point address');
+  await donor.page.getByLabel('Point latitude', { exact: true }).fill('-6.2');
+  await donor.page.getByLabel('Point longitude', { exact: true }).fill('106.816');
   await donor.page.getByLabel('I have the partner’s consent to operate this point').check();
   await donor.page.getByRole('button', { name: 'Prepare point review card' }).click();
   await donor.page.getByRole('button', { name: 'Confirm', exact: true }).waitFor();
@@ -181,6 +202,7 @@ try {
   await recipient.page.goto(new URL('/communities?point=' + point.id, web).href);
   await recipient.page.getByRole('button', { name: 'Confirm join request' }).click();
   await recipient.page.getByText('Membership: active · member', { exact: true }).waitFor();
+  await recipient.page.getByText('Donate items at this point', { exact: true }).click();
   await recipient.page.getByLabel('Item', { exact: true }).fill('Smoke point books');
   await recipient.page.getByLabel('Quantity', { exact: true }).fill('2');
   await recipient.page.getByRole('button', { name: 'Confirm proposed deposit' }).click();

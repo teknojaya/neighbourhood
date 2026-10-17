@@ -3,7 +3,7 @@ import { NeedMatches } from './NeedMatches';
 import { Link } from 'react-router';
 import { z } from 'zod';
 import { ApiRoutes, SavedNeedPageSchema } from '@neighbourhood/shared';
-import { Alert, Button, Card } from '../../components/ui';
+import { Alert, Button, Card, PageHeading, Skeleton } from '../../components/ui';
 import { t } from '../../i18n';
 import { api } from '../../lib/api';
 import { useOnline } from '../../lib/useOnline';
@@ -23,13 +23,12 @@ export function SavedNeedsPage() {
   });
   const items = saved.data?.pages.flatMap((page) => page.items) ?? [];
   return <div className="space-y-4">
-    <h1 className="text-2xl font-bold">{t('needs.savedTitle')}</h1>
-    <p className="text-sm text-stone-600">{t('ask.savedIndependent')}</p>
-    <Link to="/needs" className="text-sm font-semibold text-brand-800 underline">{t('ask.back')}</Link>
-    {saved.isPending && <Alert>{t('common.loading')}</Alert>}
+    <PageHeading title={t('needs.savedTitle')}>Keep what you’re looking for here, even after deleting a chat. Find matches whenever you’re ready.</PageHeading>
+    <Link to="/needs" className="inline-flex min-h-11 items-center text-sm font-semibold text-brand-800 underline">Ask for something</Link>
+    {saved.isPending && <Skeleton />}
     {saved.isError && <Alert tone="error">{featureError(saved.error)}</Alert>}
     {remove.isError && <Alert tone="error">{featureError(remove.error)}</Alert>}
-    {saved.isSuccess && items.length === 0 && <p>{t('needs.savedEmpty')}</p>}
+    {saved.isSuccess && items.length === 0 && <Card className="space-y-2"><h2 className="font-semibold">Nothing saved yet</h2><p className="text-sm text-stone-600">Tell Ask what you need, then confirm the save. You can come back here to find nearby matches.</p></Card>}
     {items.map((need) => <Card key={need.id} className="space-y-3">
       {need.extraction.items.map((item, index) => <div key={index} className="space-y-1">
         <p className="font-semibold">{item.name}</p>

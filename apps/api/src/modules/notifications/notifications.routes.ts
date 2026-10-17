@@ -11,6 +11,9 @@ import type { NotificationsService } from './notifications.service.js';
  */
 export function notificationsRouter(service: NotificationsService): Router {
   const r = Router();
+  r.get('/notifications/unread', async (req, res) => {
+    res.json(await service.unread(authUser(req).userId));
+  });
   r.get('/notifications', async (req, res) => {
     res.json(await service.list(authUser(req).userId, parseQuery(PageQuerySchema, req)));
   });

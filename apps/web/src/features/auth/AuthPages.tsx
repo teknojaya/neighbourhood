@@ -92,7 +92,6 @@ export function LoginPage() {
         <p className="text-2xl font-bold text-brand-800">{t('app.name')}</p>
         <p className="text-sm text-stone-600">{t('app.tagline')}</p>
       </div>
-      <DemoSignIn />
       <Card className="space-y-4">
         <div>
           <h1 className="text-xl font-semibold">{t('auth.signIn')}</h1>
@@ -150,6 +149,7 @@ export function LoginPage() {
           </form>
         )}
       </Card>
+      <DemoSignIn />
     </main>
   );
 }

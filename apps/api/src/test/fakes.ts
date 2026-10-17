@@ -125,7 +125,7 @@ export function buildTestApp(opts: {
     ai: new AiService(opts.generator ?? null, () => new Date('2026-10-17T00:00:00Z')),
     requests: opts.requests ?? { create: unavailable, transition: unavailable, get: unavailable, list: unavailable },
     conversations: opts.conversations ?? { get: unavailable, list: unavailable, messages: unavailable, send: unavailable, markRead: unavailable },
-    notifications: opts.notifications ?? { list: unavailable, markRead: unavailable },
+    notifications: opts.notifications ?? { list: unavailable, markRead: unavailable, unread: unavailable },
     needs: opts.needs ?? { list: unavailable, save: unavailable, delete: unavailable },
   });
   return { app, access, users, profilesRepo };

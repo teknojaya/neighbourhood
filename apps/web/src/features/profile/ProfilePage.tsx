@@ -1,8 +1,9 @@
 import { DEFAULT_RADIUS_KM, RADIUS_OPTIONS_KM, type RadiusKm, type UiLanguage } from '@neighbourhood/shared';
 import { type FormEvent, useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { useAuth } from '../../auth/AuthProvider';
 import { useMe, useSaveProfile } from '../../auth/useMe';
-import { Alert, Button, Card, TextField } from '../../components/ui';
+import { Alert, Button, Card, PageHeading, Skeleton, TextField } from '../../components/ui';
 import { t } from '../../i18n';
 import { ApiError } from '../../lib/api';
 import { useOnline } from '../../lib/useOnline';
@@ -61,15 +62,17 @@ export function ProfilePage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">{profile?.displayName ? t('profile.title') : t('profile.setupTitle')}</h1>
+      <PageHeading title={profile?.displayName ? t('profile.title') : t('profile.setupTitle')}>Your neighbourhood, preferences and account.</PageHeading>
+      <div className="flex flex-wrap gap-x-5 gap-y-1 border-b border-stone-200 pb-3 text-sm font-semibold text-brand-800"><Link className="inline-flex min-h-11 items-center underline" to="/needs/saved">Saved needs</Link><Link className="inline-flex min-h-11 items-center underline" to="/communities">Communities & points</Link><Link className="inline-flex min-h-11 items-center underline" to="/categories">Product categories</Link></div>
       {me.data?.email && <p className="text-sm text-stone-600">{t('profile.email', { email: me.data.email })}</p>}
       {profile && !profile.displayName && <Alert tone="info">{t('profile.needsName')}</Alert>}
       {me.isError && <Alert tone="error">{t('error.generic')}</Alert>}
+      {me.isPending && <Skeleton cards={2} />}
 
       <Card>
         <form className="space-y-4" onSubmit={onSubmit}>
           <TextField label={t('auth.displayName')} value={displayName} onChange={(e) => setDisplayName(e.target.value)} minLength={2} maxLength={60} required />
-          <TextField label={t('profile.area')} hint={t('profile.areaHint')} value={areaLabel} onChange={(e) => setAreaLabel(e.target.value)} maxLength={120} />
+          <TextField label="Neighbourhood / city / region" hint="Shown on your listings, for example: Tebet, South Jakarta. Keep your exact address private." value={areaLabel} onChange={(e) => setAreaLabel(e.target.value)} maxLength={120} />
 
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium">{t('profile.location')}</legend>
@@ -85,17 +88,18 @@ export function ProfilePage() {
               )}
             </div>
             {geoState === 'unavailable' && <Alert tone="warning">{t('profile.geoUnavailable')}</Alert>}
-            <div className="grid grid-cols-2 gap-2">
+            {(lat && lng) && <p className="text-sm text-brand-800">Location set. Save to use it for nearby discovery.</p>}
+            <details><summary className="cursor-pointer py-3 text-sm font-semibold text-brand-800">Enter coordinates manually</summary><div className="grid grid-cols-2 gap-2">
               <TextField label={t('profile.lat')} inputMode="decimal" value={lat} onChange={(e) => setLat(e.target.value)} pattern="-?\d{1,2}(\.\d+)?" required={lng !== ''} />
               <TextField label={t('profile.lng')} inputMode="decimal" value={lng} onChange={(e) => setLng(e.target.value)} pattern="-?\d{1,3}(\.\d+)?" required={lat !== ''} />
-            </div>
+            </div></details>
           </fieldset>
 
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium">{t('profile.radius')}</legend>
             <div className="grid grid-cols-4 gap-2">
               {RADIUS_OPTIONS_KM.map((km) => (
-                <label key={km} className={`flex min-h-11 cursor-pointer items-center justify-center rounded-xl text-sm font-semibold ring-1 ${radius === km ? 'bg-brand-700 text-white ring-brand-700' : 'bg-white ring-stone-300'}`}>
+                <label key={km} className={`flex min-h-11 cursor-pointer items-center justify-center rounded-xl text-sm font-semibold ring-1 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-brand-700 ${radius === km ? 'bg-brand-700 text-white ring-brand-700' : 'bg-white ring-stone-300'}`}>
                   <input type="radio" name="radius" value={km} checked={radius === km} onChange={() => setRadius(km)} className="sr-only" />
                   {t('profile.radiusOption', { km })}
                 </label>
@@ -104,11 +108,12 @@ export function ProfilePage() {
           </fieldset>
 
           <label className="block space-y-1">
-            <span className="text-sm font-medium">{t('profile.language')}</span>
+            <span className="text-sm font-medium">Preferred language for Ask</span>
             <select value={language} onChange={(e) => setLanguage(e.target.value as UiLanguage)} className="block min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3">
               <option value="en">English</option>
               <option value="id">Bahasa Indonesia</option>
             </select>
+            <span className="block text-sm text-stone-600">Ask supports English and Bahasa Indonesia. App menus currently use English.</span>
           </label>
 
           {!online && <Alert tone="warning">{t('error.OFFLINE')}</Alert>}
@@ -126,8 +131,9 @@ export function ProfilePage() {
         <Card className="text-sm">
           <p className="font-medium">{t('profile.roles')}</p>
           <p className="text-stone-600">
-            {[...me.data.platformRoles, ...me.data.memberships.map((m) => `${m.role} @ ${m.communityId}`)].join(', ') || t('profile.noRoles')}
+            {[...new Set([...me.data.platformRoles, ...me.data.memberships.map(m => m.role)])].map(role => role.replaceAll('_', ' ')).join(', ') || 'Neighbour'}
           </p>
+          <Link to="/communities" className="inline-flex min-h-11 items-center font-semibold text-brand-800 underline">View your community roles</Link>
         </Card>
       )}
 

@@ -1,15 +1,17 @@
 import { AI_LIMITS, type NeedsExtraction } from '@neighbourhood/shared';
 import { type FormEvent, useState } from 'react';
-import { Link } from 'react-router';
 import { Alert, Button, Card } from '../../components/ui';
 import { hasMessage, t } from '../../i18n';
 import { ApiError } from '../../lib/api';
 import { useOnline } from '../../lib/useOnline';
-import { useAiStatus, useExtractNeeds } from './useNeeds';
+import { useAiStatus, useDeleteNeed, useExtractNeeds, useSavedNeeds, useSaveNeed } from './useNeeds';
 
 export function NeedsAssistantPage() {
   const status = useAiStatus();
   const extract = useExtractNeeds();
+  const saved = useSavedNeeds();
+  const save = useSaveNeed();
+  const remove = useDeleteNeed();
   const online = useOnline();
   const [text, setText] = useState('');
 
@@ -18,7 +20,7 @@ export function NeedsAssistantPage() {
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (canSubmit) extract.mutate(text.trim());
+    if (canSubmit) { save.reset(); extract.mutate(text.trim()); }
   }
 
   return (
@@ -63,7 +65,42 @@ export function NeedsAssistantPage() {
         </form>
       </Card>
 
-      {extract.data && <ExtractionResult extraction={extract.data.extraction} />}
+      {extract.data && (
+        <div className="space-y-3">
+          <ExtractionResult extraction={extract.data.extraction} />
+          {save.isError && <Alert tone="error">{errorText(save.error)}</Alert>}
+          {save.isSuccess && <Alert tone="info">{t('needs.saved')}</Alert>}
+          <Button
+            type="button"
+            className="w-full"
+            disabled={extract.data.extraction.items.length === 0 || save.isPending || save.isSuccess || !online}
+            onClick={() => save.mutate(extract.data.extraction)}
+          >
+            {save.isPending ? t('common.saving') : t('needs.save')}
+          </Button>
+        </div>
+      )}
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">{t('needs.savedTitle')}</h2>
+        {saved.isPending && <Alert>{t('common.loading')}</Alert>}
+        {saved.isError && <Alert tone="error">{errorText(saved.error)}</Alert>}
+        {remove.isError && <Alert tone="error">{errorText(remove.error)}</Alert>}
+        {saved.data?.items.length === 0 && <p className="text-sm text-stone-600">{t('needs.savedEmpty')}</p>}
+        {saved.data?.items.map((need) => (
+          <Card key={need.id} className="space-y-2">
+            <p className="font-medium">{need.extraction.items.map((item) => item.name).join(', ')}</p>
+            <p className="text-xs text-stone-500">{new Date(need.createdAt).toLocaleDateString()}</p>
+            <Button
+              type="button"
+              disabled={remove.isPending || !online}
+              onClick={() => { if (window.confirm(t('needs.deleteConfirm'))) remove.mutate(need.id); }}
+            >
+              {t('needs.delete')}
+            </Button>
+          </Card>
+        ))}
+      </section>
     </div>
   );
 }
@@ -90,14 +127,6 @@ function ExtractionResult({ extraction }: { extraction: NeedsExtraction }) {
             {outOfScope.map((o, i) => (
               <li key={i}>
                 {t(`needs.oos.${o.kind}`)}
-                {o.kind === 'medicine' && (
-                  <>
-                    {' '}
-                    <Link to="/medicine" className="font-semibold text-brand-800 underline">
-                      {t('needs.medicineLink')}
-                    </Link>
-                  </>
-                )}
               </li>
             ))}
           </ul>

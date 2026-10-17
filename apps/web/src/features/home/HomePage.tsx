@@ -9,7 +9,7 @@ const MODULES: Array<{ to: string; title: MessageKey; body: MessageKey }> = [
   { to: '/communities', title: 'module.communities.title', body: 'module.communities.body' },
   { to: '/messages', title: 'module.messages.title', body: 'module.messages.body' },
   { to: '/notifications', title: 'module.notifications.title', body: 'module.notifications.body' },
-  { to: '/medicine', title: 'module.medicine.title', body: 'module.medicine.body' },
+  { to: '/categories', title: 'module.categories.title', body: 'module.categories.body' },
 ];
 
 export function HomePage() {

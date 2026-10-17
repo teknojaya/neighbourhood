@@ -15,12 +15,17 @@ import type { EmailOtpService } from './modules/email-otp/otp.service.js';
 import { conversationsRouter } from './modules/conversations/conversations.routes.js';
 import { listingsRouter } from './modules/listings/listings.routes.js';
 import { loansRouter } from './modules/loans/loans.routes.js';
-import { medicineAssistanceRouter } from './modules/medicine-assistance/medicine-assistance.routes.js';
 import { needsRouter } from './modules/needs/needs.routes.js';
+import type { NeedsService } from './modules/needs/needs.service.js';
 import { notificationsRouter } from './modules/notifications/notifications.routes.js';
 import { profilesRouter } from './modules/profiles/profiles.routes.js';
 import type { ProfilesService } from './modules/profiles/profiles.service.js';
 import { requestsRouter } from './modules/requests/requests.routes.js';
+import type { RequestsService } from './modules/requests/requests.service.js';
+import type { ConversationsService } from './modules/conversations/conversations.service.js';
+import type { NotificationsService } from './modules/notifications/notifications.service.js';
+import { askRouter } from './modules/ask/ask.routes.js';
+import type { AskService } from './modules/ask/ask.service.js';
 
 export interface AppDeps {
   config: AppConfig;
@@ -30,6 +35,11 @@ export interface AppDeps {
   otp: EmailOtpService;
   profiles: ProfilesService;
   ai: AiService;
+  requests: RequestsService;
+  conversations: ConversationsService;
+  notifications: NotificationsService;
+  needs: NeedsService;
+  ask?: AskService;
 }
 
 export function createApp(deps: AppDeps): Express {
@@ -102,14 +112,14 @@ export function createApp(deps: AppDeps): Express {
 
   api.use(profilesRouter(deps.profiles));
   api.use(aiRouter(deps.ai));
+  if (deps.ask) api.use(askRouter(deps.ask));
   api.use(listingsRouter());
   api.use(communitiesRouter());
-  api.use(requestsRouter());
+  api.use(requestsRouter(deps.requests));
   api.use(loansRouter());
-  api.use(needsRouter());
-  api.use(conversationsRouter());
-  api.use(notificationsRouter());
-  api.use(medicineAssistanceRouter());
+  api.use(needsRouter(deps.needs));
+  api.use(conversationsRouter(deps.conversations));
+  api.use(notificationsRouter(deps.notifications));
   api.use(notFound);
 
   app.use(API_PREFIX, api);

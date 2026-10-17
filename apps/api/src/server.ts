@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
+import { getStorage } from 'firebase-admin/storage';
 import { createApp } from './app.js';
 import { ConfigError, loadConfig } from './config.js';
 import { createDb } from './lib/db.js';
@@ -15,6 +16,13 @@ import { PrismaOtpChallengeRepository } from './modules/email-otp/otp.repository
 import { EmailOtpService } from './modules/email-otp/otp.service.js';
 import { PrismaProfilesRepository } from './modules/profiles/profiles.repository.js';
 import { ProfilesService } from './modules/profiles/profiles.service.js';
+import { PrismaRequestsService } from './modules/requests/requests.service.js';
+import { PrismaConversationsService } from './modules/conversations/conversations.service.js';
+import { PrismaNotificationsService } from './modules/notifications/notifications.service.js';
+import { PrismaNeedsService } from './modules/needs/needs.service.js';
+import { PrismaAskService } from './modules/ask/ask.service.js';
+import { GeminiAskModel } from './modules/ask/ask.model.js';
+import { FirebaseAskImageStorage } from './modules/ask/ask.images.js';
 
 function main() {
   let config;
@@ -51,6 +59,13 @@ function main() {
     Boolean(config.firebase.projectId),
   );
 
+  const services = { needs: new PrismaNeedsService(db), requests: new PrismaRequestsService(db), conversations: new PrismaConversationsService(db), notifications: new PrismaNotificationsService(db) };
+  const ask = new PrismaAskService(db, config.gemini ? new GeminiAskModel(config.gemini.model, config.gemini.apiKey) : null,
+    config.firebase.storageBucket ? new FirebaseAskImageStorage(getStorage(firebaseApp), config.firebase.storageBucket) : null, services);
+  // Storage cleanup is retryable; soft-deleted chats are never readable meanwhile.
+  void ask.purgeDeletedSessions().catch(() => logger.warn('ask_cleanup_unavailable'));
+  const cleanup = setInterval(() => { void ask.purgeDeletedSessions().catch(() => logger.warn('ask_cleanup_unavailable')); }, 15 * 60_000);
+  cleanup.unref();
   const app = createApp({
     config,
     tokenVerifier: new FirebaseTokenVerifier(firebaseAuth),
@@ -59,6 +74,8 @@ function main() {
     otp,
     profiles: new ProfilesService(new PrismaProfilesRepository(db), access),
     ai: new AiService(generator),
+    ...services,
+    ask,
   });
 
   const server = app.listen(config.port, () => {
@@ -77,6 +94,7 @@ function main() {
 
   const shutdown = (signal: string) => {
     logger.info('server_stopping', { signal });
+    clearInterval(cleanup);
     server.close(() => {
       void db.$disconnect().finally(() => process.exit(0));
     });

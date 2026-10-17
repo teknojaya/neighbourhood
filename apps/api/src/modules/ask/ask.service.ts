@@ -1,0 +1,385 @@
+import { createHash, randomUUID } from 'node:crypto';
+import type { Content, Part } from '@google/genai';
+import {
+  ASK_LIMITS, AskActionPayloadSchema, AskActionSchema, AskMessageSchema, DomainError,
+  AskPartSchema, AskSessionDetailSchema, AskListingDraftDataSchema,
+  type AskSendBody, type AskPart, type AskAction, type NeedsExtractionSchema,
+} from '@neighbourhood/shared';
+import { z } from 'zod';
+import type { Prisma, Db, Tx } from '../../lib/db.js';
+import { HttpError } from '../../lib/http.js';
+import { logger } from '../../lib/logger.js';
+import { beforeCursor, decodeCursor, pageRows, type PageOptions } from '../../lib/pagination.js';
+import type { AskModel } from './ask.model.js';
+import { normalizeImage, validateImage, type AskImageStorage } from './ask.images.js';
+import { AskTools, type AskServices } from './ask.tools.js';
+import { actionDto, attachmentDto, runDto, sessionDto } from './ask.dto.js';
+
+const LEASE_MS = ASK_LIMITS.turnMs + 15_000;
+const knownError = (err: unknown) => err instanceof HttpError ? err : err instanceof DomainError ? new HttpError(err.code, err.message) : null;
+export type AskService = Pick<PrismaAskService, 'status' | 'list' | 'create' | 'detail' | 'send' | 'stop' | 'upload' | 'image' | 'removeAttachment' | 'deleteSession' | 'confirm' | 'cancelAction' | 'editNeed'>;
+
+export class PrismaAskService {
+  private readonly tools: AskTools;
+  private readonly controllers = new Map<string, AbortController>();
+  constructor(private readonly db: Db, private readonly model: AskModel | null, private readonly images: AskImageStorage | null, private readonly services: AskServices) {
+    this.tools = new AskTools(db, services);
+  }
+
+  status() { return { available: this.model !== null, imagesAvailable: this.images !== null }; }
+
+  async create(userId: string, clientId: string) {
+    const row = await this.db.askSession.upsert({ where: { userId_clientId: { userId, clientId } }, create: { userId, clientId }, update: {} });
+    if (row.deletedAt) throw new HttpError('CONFLICT', 'This chat was deleted; start a new one');
+    return sessionDto(row);
+  }
+
+  async list(userId: string, opts: PageOptions) {
+    const rows = await this.db.askSession.findMany({
+      where: { userId, deletedAt: null, ...beforeCursor(decodeCursor(opts.cursor)) },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: opts.limit + 1,
+    });
+    const page = pageRows(rows, opts.limit);
+    return { ...page, items: page.items.map(sessionDto) };
+  }
+
+  private async owned(userId: string, sessionId: string, db: Db | Tx = this.db) {
+    const row = await db.askSession.findFirst({ where: { id: sessionId, userId, deletedAt: null } });
+    if (!row) throw new HttpError('NOT_FOUND', 'Chat not found');
+    return row;
+  }
+
+  private async lockSession(tx: Tx, userId: string, sessionId: string) {
+    await tx.$queryRaw`SELECT id FROM ask_sessions WHERE id = ${sessionId}::uuid AND user_id = ${userId}::uuid FOR UPDATE`;
+    return this.owned(userId, sessionId, tx);
+  }
+
+  async detail(userId: string, sessionId: string, before?: number) {
+    const session = await this.owned(userId, sessionId);
+    await this.expireRun(sessionId);
+    const rows = await this.db.askMessage.findMany({ where: { sessionId, ...(before === undefined ? {} : { sequence: { lt: before } }) }, orderBy: { sequence: 'desc' }, take: 31 });
+    const page = rows.slice(0, 30).reverse();
+    const [attachments, actions, drafts, latestRun, photoMessages] = await Promise.all([
+      this.db.askAttachment.findMany({ where: { sessionId } }),
+      this.db.askAction.findMany({ where: { sessionId } }),
+      this.db.askDraft.findMany({ where: { sessionId } }),
+      this.db.askRun.findFirst({ where: { sessionId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] }),
+      this.db.askMessage.findMany({ where: { sessionId, attachmentIds: { isEmpty: false } }, select: { attachmentIds: true } }),
+    ]);
+    const messages = page.map((row) => {
+      const parts = z.array(AskPartSchema).parse(row.parts).map((part): AskPart => {
+        if (part.kind === 'action') {
+          const current = actions.find((a) => a.id === part.action.id);
+          return current ? { kind: 'action', action: actionDto(current) } : part;
+        }
+        if (part.kind === 'listing_draft') {
+          const current = drafts.find((d) => d.id === part.draft.id);
+          return current ? { ...part, draft: { id: current.id, data: AskListingDraftDataSchema.parse(current.data), updatedAt: current.updatedAt.toISOString() } } : part;
+        }
+        return part;
+      });
+      return AskMessageSchema.parse({ ...row, parts, attachments: row.attachmentIds.flatMap((id) => {
+        const a = attachments.find((a) => a.id === id); return a ? [attachmentDto(a)] : [];
+      }), createdAt: row.createdAt.toISOString() });
+    });
+    const usedPhotos = new Set(photoMessages.flatMap((m) => m.attachmentIds));
+    return AskSessionDetailSchema.parse({ session: sessionDto(session), messages: { items: messages, beforeSequence: rows.length > 30 ? page[0]!.sequence : null }, latestRun: latestRun ? runDto(latestRun) : null,
+      pendingAttachments: attachments.filter((a) => !usedPhotos.has(a.id)).map(attachmentDto) });
+  }
+
+  private expireRun(sessionId: string) {
+    return this.db.askRun.updateMany({ where: { sessionId, status: 'running', startedAt: { lt: new Date(Date.now() - LEASE_MS) } }, data: { status: 'failed', errorCode: 'AI_TIMEOUT' } });
+  }
+
+  async send(userId: string, sessionId: string, body: AskSendBody) {
+    if (!this.model) throw new HttpError('AI_NOT_CONFIGURED', 'The assistant is not configured');
+    const requestHash = createHash('sha256').update(JSON.stringify({ text: body.text, attachmentIds: body.attachmentIds })).digest('hex');
+    const claim = await this.db.$transaction(async (tx) => {
+      const session = await this.lockSession(tx, userId, sessionId);
+      await tx.askRun.updateMany({ where: { sessionId, status: 'running', startedAt: { lt: new Date(Date.now() - LEASE_MS) } }, data: { status: 'failed', errorCode: 'AI_TIMEOUT' } });
+      const existing = await tx.askRun.findUnique({ where: { sessionId_clientMessageId: { sessionId, clientMessageId: body.clientMessageId } } });
+      if (existing && existing.requestHash !== requestHash) throw new HttpError('CONFLICT', 'This message ID was already used for different input');
+      if (existing && existing.status !== 'failed') return { run: existing, execute: false };
+      const active = await tx.askRun.findFirst({ where: { sessionId, status: 'running' } });
+      if (active) throw new HttpError('CONFLICT', 'Wait for the current assistant reply');
+      if (existing) {
+        const latest = await tx.askRun.findFirst({ where: { sessionId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
+        if (latest?.id !== existing.id) throw new HttpError('CONFLICT', 'This turn is no longer the latest; send a new message');
+        await tx.askAction.updateMany({ where: { runId: existing.id, status: 'pending' }, data: { status: 'cancelled' } });
+        const run = await tx.askRun.update({ where: { id: existing.id }, data: { status: 'running', errorCode: null, startedAt: new Date(), attemptId: randomUUID() } });
+        return { run, execute: true };
+      }
+      const ids = [...new Set(body.attachmentIds)];
+      const count = await tx.askAttachment.count({ where: { id: { in: ids }, sessionId } });
+      if (count !== ids.length) throw new HttpError('NOT_FOUND', 'Photo not found in this chat');
+      if (ids.length && await tx.askMessage.count({ where: { sessionId, attachmentIds: { hasSome: ids } } })) throw new HttpError('CONFLICT', 'This photo is already in the chat history');
+      await tx.askMessage.create({ data: { sessionId, sequence: session.nextSequence, role: 'user', text: body.text, attachmentIds: ids } });
+      await tx.askSession.update({ where: { id: sessionId }, data: { nextSequence: { increment: 1 }, ...(session.nextSequence === 0 ? { title: (body.text || 'Photo conversation').slice(0, 80) } : {}) } });
+      const run = await tx.askRun.create({ data: { sessionId, clientMessageId: body.clientMessageId, requestHash } });
+      return { run, execute: true };
+    });
+    if (!claim.execute) return runDto(claim.run);
+
+    const { run } = claim;
+    const controller = new AbortController();
+    this.controllers.set(run.attemptId, controller);
+    const signal = AbortSignal.any([AbortSignal.timeout(ASK_LIMITS.turnMs), controller.signal]);
+    try {
+      const contents = await this.context(userId, sessionId);
+      const cards: AskPart[] = [];
+      let calls = 0;
+      let finalText = '';
+      for (let round = 0; round < ASK_LIMITS.modelRounds; round++) {
+        signal.throwIfAborted();
+        const output = await this.model.generate(contents, this.tools.declarations(), signal);
+        signal.throwIfAborted();
+        const functionParts = output.parts?.filter((p) => p.functionCall) ?? [];
+        if (!functionParts.length) {
+          finalText = output.parts?.filter((p) => !p.thought).map((p) => p.text ?? '').join('').trim().slice(0, 8000) ?? '';
+          if (!finalText && !cards.length) throw new HttpError('AI_INVALID_OUTPUT', 'The assistant returned an empty reply');
+          break;
+        }
+        if (calls + functionParts.length > ASK_LIMITS.toolCalls) throw new HttpError('AI_INVALID_OUTPUT', 'The assistant reached its tool limit; try a more specific request');
+        // Preserve all provider metadata on tool calls, including thought signatures.
+        contents.push(output);
+        const results: Part[] = [];
+        for (const part of functionParts) {
+          calls++;
+          const call = part.functionCall!;
+          let result: unknown;
+          try {
+            const executed = await this.tools.execute(call.name ?? '', call.args ?? {}, { userId, sessionId, runId: run.id, attemptId: run.attemptId, signal });
+            cards.push(...executed.parts);
+            result = executed.result;
+          } catch (err) {
+            if (signal.aborted) throw err;
+            const failure = knownError(err);
+            if (!failure) throw err;
+            result = { error: { code: failure.code, message: failure.message }, committed: false };
+          }
+          const serialized = JSON.stringify(result);
+          const response = serialized.length > 16_000
+            ? { truncated: true, preview: serialized.slice(0, 16_000), note: 'Only this prefix is included. Ask for clarification instead of inferring omitted IDs or content.' }
+            : { result };
+          results.push({ functionResponse: { name: call.name, ...(call.id ? { id: call.id } : {}), response } });
+        }
+        contents.push({ role: 'user', parts: results });
+      }
+      if (!finalText && !cards.length) throw new HttpError('AI_INVALID_OUTPUT', 'The assistant reached its turn limit');
+      await this.db.$transaction(async (tx) => {
+        const session = await this.lockSession(tx, userId, sessionId);
+        const live = await tx.askRun.updateMany({ where: { id: run.id, attemptId: run.attemptId, status: 'running' }, data: { status: 'completed' } });
+        if (!live.count) throw new HttpError('CONFLICT', 'This turn has ended');
+        await tx.askMessage.create({ data: { sessionId, sequence: session.nextSequence, role: 'assistant', text: finalText, parts: cards as unknown as Prisma.InputJsonValue } });
+        await tx.askSession.update({ where: { id: sessionId }, data: { nextSequence: { increment: 1 } } });
+      });
+    } catch (err) {
+      const code = signal.aborted ? 'AI_TIMEOUT' : knownError(err)?.code ?? 'INTERNAL';
+      logger.warn('ask_turn_failed', { runId: run.id, code });
+      const failed = await this.db.askRun.updateMany({ where: { id: run.id, attemptId: run.attemptId, status: 'running' }, data: { status: 'failed', errorCode: code } });
+      if (failed.count) await this.db.askAction.updateMany({ where: { runId: run.id, status: 'pending' }, data: { status: 'cancelled' } });
+    } finally { this.controllers.delete(run.attemptId); }
+    const current = await this.db.askRun.findUnique({ where: { id: run.id } });
+    return runDto(current ?? { ...run, status: 'cancelled', errorCode: null });
+  }
+
+  async stop(userId: string, sessionId: string) {
+    const run = await this.db.$transaction(async (tx) => {
+      const session = await this.lockSession(tx, userId, sessionId);
+      const current = await tx.askRun.findFirst({ where: { sessionId, status: 'running' } });
+      if (!current) return null;
+      await tx.askRun.update({ where: { id: current.id }, data: { status: 'cancelled', errorCode: null } });
+      await tx.askAction.updateMany({ where: { runId: current.id, status: 'pending' }, data: { status: 'cancelled' } });
+      // Keep cancellation in the transcript so a later turn does not resume the stopped task.
+      await tx.askMessage.create({ data: { sessionId, sequence: session.nextSequence, role: 'assistant', text: 'This reply was stopped. Send a new message when you are ready.' } });
+      await tx.askSession.update({ where: { id: sessionId }, data: { nextSequence: { increment: 1 } } });
+      return current;
+    });
+    if (!run) return;
+    this.controllers.get(run.attemptId)?.abort();
+  }
+
+  private async context(userId: string, sessionId: string): Promise<Content[]> {
+    const detail = await this.detail(userId, sessionId);
+    const messages = detail.messages.items.slice(-ASK_LIMITS.historyMessages);
+    const imageIds = messages.flatMap((m) => m.attachments.map((a) => a.id)).slice(-ASK_LIMITS.attachmentsPerMessage);
+    const contents: Content[] = [];
+    let chars = 0;
+    for (const message of [...messages].reverse()) {
+      const cardContext = message.parts.length ? `\nServer cards: ${JSON.stringify(message.parts).slice(0, 6000)}` : '';
+      const text = `${message.text}${cardContext}`;
+      if (chars + text.length > 32_000 && contents.length) break;
+      chars += text.length;
+      const parts: Part[] = [{ text: text || 'Attached photo' }];
+      for (const a of message.attachments) {
+        if (imageIds.includes(a.id)) {
+          const { bytes } = await this.image(userId, sessionId, a.id);
+          parts.push({ inlineData: { mimeType: a.mimeType, data: bytes.toString('base64') } });
+        } else parts.push({ text: `[Earlier photo ${a.id} omitted from this turn]` });
+      }
+      contents.unshift({ role: message.role === 'assistant' ? 'model' : 'user', parts });
+    }
+    return contents;
+  }
+
+  async upload(userId: string, sessionId: string, bytes: Buffer, mimeType: string, uploadKey: string = randomUUID()) {
+    await this.owned(userId, sessionId);
+    if (!this.images) throw new HttpError('AUTH_NOT_CONFIGURED', 'Image storage is not configured');
+    const sourceHash = createHash('sha256').update(mimeType).update(bytes).digest('hex');
+    bytes = await normalizeImage(bytes, mimeType);
+    mimeType = 'image/webp';
+    const id = randomUUID();
+    const path = `ask-attachments/${sessionId}/${id}`;
+    try {
+      return await this.db.$transaction(async (tx) => {
+        await this.lockSession(tx, userId, sessionId);
+        const replay = await tx.askAttachment.findUnique({ where: { sessionId_uploadKey: { sessionId, uploadKey } } });
+        if (replay) {
+          if (replay.sourceHash !== sourceHash) throw new HttpError('CONFLICT', 'This upload key was used for a different photo');
+          return attachmentDto(replay);
+        }
+        if (await tx.askAttachment.count({ where: { sessionId } }) >= 20) throw new HttpError('RATE_LIMITED', 'This chat has reached its photo limit');
+        // Serialize upload with chat deletion; never expose an unready attachment.
+        await this.images!.write(path, bytes, mimeType);
+        const row = await tx.askAttachment.create({ data: { id, sessionId, storagePath: path, mimeType, size: bytes.length, uploadKey, sourceHash, name: 'Photo.webp' } });
+        return attachmentDto(row);
+      }, { maxWait: 10_000, timeout: 15_000 });
+    } catch (err) {
+      try { await this.images.delete(path); } catch { logger.warn('ask_upload_cleanup_failed', { attachmentId: id }); }
+      if (err instanceof HttpError) throw err;
+      throw new HttpError('AUTH_NOT_CONFIGURED', 'Image storage is unavailable');
+    }
+  }
+
+  async image(userId: string, sessionId: string, id: string) {
+    await this.owned(userId, sessionId);
+    const row = await this.db.askAttachment.findFirst({ where: { id, sessionId } });
+    if (!row) throw new HttpError('NOT_FOUND', 'Photo not found');
+    if (!this.images) throw new HttpError('AUTH_NOT_CONFIGURED', 'Image storage is not configured');
+    let bytes: Buffer;
+    try { bytes = await this.images.read(row.storagePath); }
+    catch { throw new HttpError('NOT_FOUND', 'This photo is unavailable; attach it again'); }
+    validateImage(bytes, row.mimeType);
+    if (bytes.length !== row.size) throw new HttpError('VALIDATION_FAILED', 'Photo content changed');
+    return { bytes, mimeType: row.mimeType };
+  }
+
+  async removeAttachment(userId: string, sessionId: string, id: string) {
+    await this.db.$transaction(async (tx) => {
+      await this.lockSession(tx, userId, sessionId);
+      if (await tx.askMessage.count({ where: { sessionId, attachmentIds: { has: id } } })) throw new HttpError('CONFLICT', 'Photos in chat history are removed when the chat is deleted');
+      const row = await tx.askAttachment.findFirst({ where: { id, sessionId } });
+      if (!row) return;
+      if (!this.images) throw new HttpError('AUTH_NOT_CONFIGURED', 'Image storage is not configured');
+      await this.images.delete(row.storagePath);
+      await tx.askAttachment.delete({ where: { id } });
+    });
+  }
+
+  async deleteSession(userId: string, sessionId: string) {
+    await this.db.$transaction(async (tx) => {
+      await this.lockSession(tx, userId, sessionId);
+      await tx.askRun.updateMany({ where: { sessionId, status: 'running', startedAt: { lt: new Date(Date.now() - LEASE_MS) } }, data: { status: 'failed', errorCode: 'AI_TIMEOUT' } });
+      if (await tx.askRun.count({ where: { sessionId, status: 'running' } }) || await tx.askAction.count({ where: { sessionId, status: 'executing' } })) throw new HttpError('CONFLICT', 'Wait for this chat\'s current action to finish');
+      await tx.askSession.update({ where: { id: sessionId }, data: { deletedAt: new Date() } });
+    });
+    // Soft deletion immediately denies access. Cleanup is retryable if storage fails.
+    await this.purgeDeletedSessions();
+  }
+
+  async purgeDeletedSessions() {
+    let removed = 0;
+    const sessions = await this.db.askSession.findMany({ where: { deletedAt: { not: null } }, include: { attachments: true }, take: 20 });
+    for (const session of sessions) {
+      try {
+        if (session.attachments.length && !this.images) continue;
+        for (const a of session.attachments) await this.images!.delete(a.storagePath);
+        await this.db.askSession.delete({ where: { id: session.id } });
+        removed++;
+      } catch { logger.warn('ask_cleanup_retry_needed', { sessionId: session.id }); }
+    }
+    return removed;
+  }
+
+  /** Daily maintenance: recover files left by an uncertain storage/DB failure. */
+  async purgeOrphanedImages() {
+    let removed = 0;
+    if (!this.images?.candidates) return removed;
+    for await (const file of this.images.candidates()) {
+      if (!file.path.startsWith('ask-attachments/') || !Number.isFinite(file.createdAt.getTime()) || Date.now() - file.createdAt.getTime() < 24 * 60 * 60_000) continue;
+      if (await this.db.askAttachment.count({ where: { storagePath: file.path } }) === 0) { await this.images.delete(file.path); removed++; }
+    }
+    return removed;
+  }
+
+  private async ownedAction(userId: string, actionId: string, db: Db | Tx = this.db) {
+    const row = await db.askAction.findFirst({ where: { id: actionId, session: { userId, deletedAt: null } } });
+    if (!row) throw new HttpError('NOT_FOUND', 'Action not found');
+    return row;
+  }
+
+  async editNeed(userId: string, actionId: string, revision: number, extraction: z.infer<typeof NeedsExtractionSchema>) {
+    if (!extraction.items.length) throw new HttpError('VALIDATION_FAILED', 'Add an item before saving');
+    const row = await this.ownedAction(userId, actionId);
+    if (AskActionPayloadSchema.parse(row.payload).kind !== 'save_need') throw new HttpError('BAD_REQUEST', 'Only need review cards are editable here');
+    const updated = await this.db.askAction.updateMany({ where: { id: actionId, status: 'pending', revision, expiresAt: { gt: new Date() } }, data: { payload: { kind: 'save_need', extraction }, summary: extraction.items.map((i) => i.name).join(', ').slice(0, 300), revision: { increment: 1 } } });
+    if (!updated.count) throw new HttpError('CONFLICT', 'This review card changed or expired');
+    return actionDto(await this.ownedAction(userId, actionId));
+  }
+
+  async cancelAction(userId: string, actionId: string) {
+    await this.ownedAction(userId, actionId);
+    await this.db.askAction.updateMany({ where: { id: actionId, status: 'pending' }, data: { status: 'cancelled' } });
+    return actionDto(await this.ownedAction(userId, actionId));
+  }
+
+  async confirm(userId: string, actionId: string, revision: number): Promise<AskAction> {
+    const row = await this.ownedAction(userId, actionId);
+    const claim = await this.db.$transaction(async (tx) => {
+      await this.lockSession(tx, userId, row.sessionId);
+      await tx.$queryRaw`SELECT id FROM ask_actions WHERE id = ${actionId}::uuid FOR UPDATE`;
+      const current = await this.ownedAction(userId, actionId, tx);
+      if (current.status === 'completed') return { execute: false, row: current };
+      if (current.revision !== revision) throw new HttpError('CONFLICT', 'Review the updated action before confirming');
+      if (current.status === 'executing' && current.startedAt && Date.now() - current.startedAt.getTime() < 30_000) return { execute: false, row: current };
+      if (current.status === 'executing' && current.startedAt && Date.now() - current.startedAt.getTime() > 20 * 60 * 60_000) throw new HttpError('CONFLICT', 'This action needs manual status verification');
+      if (current.status !== 'executing' && (current.status !== 'pending' || current.expiresAt.getTime() <= Date.now())) throw new HttpError('CONFLICT', 'This action was cancelled or expired');
+      const updated = await tx.askAction.update({ where: { id: actionId }, data: { status: 'executing', startedAt: new Date(), errorCode: null } });
+      return { execute: true, row: updated };
+    });
+    if (!claim.execute) return actionDto(claim.row);
+    const payload = AskActionPayloadSchema.parse(claim.row.payload);
+    const key = `ask_${actionId}_${revision}`;
+    let receipt: { message: string; link: string | null };
+    try {
+      switch (payload.kind) {
+        case 'save_need': {
+          await this.services.needs.save(userId, key, { extraction: payload.extraction });
+          receipt = { message: 'Need saved', link: '/needs/saved' }; break;
+        }
+        case 'request_item': {
+          const result = await this.services.requests.create(userId, key, payload.body);
+          receipt = { message: 'Request submitted for owner approval', link: `/activity?request=${result.body.id}` }; break;
+        }
+        case 'transition_request': {
+          const result = await this.services.requests.transition(userId, key, payload.requestId, payload.body);
+          receipt = { message: `Request ${result.body.status}`, link: `/activity?request=${result.body.id}` }; break;
+        }
+        case 'send_message': {
+          await this.services.conversations.send(userId, key, payload.conversationId, payload.body);
+          receipt = { message: 'Message sent', link: `/messages?conversation=${payload.conversationId}` }; break;
+        }
+      }
+    } catch (err) {
+      // A definite domain rejection did not commit. Unknown failures keep the claim
+      // immutable so recovery can replay the SAME domain idempotency key.
+      const failure = knownError(err);
+      const definite = failure !== null && failure.status < 500;
+      await this.db.askAction.update({ where: { id: actionId }, data: { status: definite ? 'pending' : 'executing', errorCode: failure?.code ?? 'INTERNAL' } });
+      if (failure) throw failure;
+      throw new HttpError('INTERNAL', 'Check this action\'s status before retrying');
+    }
+    const completed = await this.db.askAction.update({ where: { id: actionId }, data: { status: 'completed', receipt, errorCode: null } });
+    return AskActionSchema.parse(actionDto(completed));
+  }
+}

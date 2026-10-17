@@ -1,15 +1,23 @@
-import type { Router } from 'express';
-import { plannedRouter } from '../planned.js';
+import { Router } from 'express';
+import { PageQuerySchema } from '@neighbourhood/shared';
+import { notImplemented, parseQuery } from '../../lib/http.js';
+import { uuidParam } from '../../lib/route-input.js';
+import { authUser } from '../auth/auth.js';
+import type { NotificationsService } from './notifications.service.js';
 
 /**
  * Owner: Engineer 2. Contracts: packages/shared/src/contracts/messaging.ts.
  * Push is opt-in; payloads must not contain addresses or medical details.
  */
-export function notificationsRouter(): Router {
-  return plannedRouter([
-    ['get', '/notifications', 'Notification inbox'],
-    ['post', '/notifications/:notificationId/read', 'Mark notification read'],
-    ['post', '/notifications/push-tokens', 'Register push token'],
-    ['delete', '/notifications/push-tokens/:tokenId', 'Remove push token'],
-  ]);
+export function notificationsRouter(service: NotificationsService): Router {
+  const r = Router();
+  r.get('/notifications', async (req, res) => {
+    res.json(await service.list(authUser(req).userId, parseQuery(PageQuerySchema, req)));
+  });
+  r.post('/notifications/:notificationId/read', async (req, res) => {
+    res.json(await service.markRead(authUser(req).userId, uuidParam(req, 'notificationId')));
+  });
+  r.post('/notifications/push-tokens', notImplemented('Register push token'));
+  r.delete('/notifications/push-tokens/:tokenId', notImplemented('Remove push token'));
+  return r;
 }

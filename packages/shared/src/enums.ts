@@ -29,7 +29,7 @@ export type CollectionMethod = z.infer<typeof CollectionMethodSchema>;
  * Platform-wide roles. Granted only by server-side tooling run by operators
  * (see apps/api/scripts/grant-role.ts) into `user_roles`. Never accepted from request bodies.
  */
-export const PlatformRoleSchema = z.enum(['staff', 'medicine_partner']);
+export const PlatformRoleSchema = z.enum(['staff', 'product_category_editor']);
 export type PlatformRole = z.infer<typeof PlatformRoleSchema>;
 
 /** Per-community roles, stored server-side on the membership record. */

@@ -4,7 +4,6 @@ import {
   donationRequestMachine,
   listingMachine,
   loanMachine,
-  medicineAssistanceMachine,
 } from './machines.js';
 import { allowedTargets, assertTransition, canTransition, DomainError } from './state-machine.js';
 
@@ -71,14 +70,11 @@ describe('loan transitions', () => {
   });
 });
 
-describe('deposit and medicine transitions', () => {
+describe('deposit transitions', () => {
   it('only volunteers accept deposits', () => {
     expect(canTransition(depositMachine, 'proposed', 'accepted', 'volunteer')).toBe(true);
     expect(canTransition(depositMachine, 'proposed', 'accepted', 'owner')).toBe(false);
     expect(canTransition(depositMachine, 'proposed', 'accepted', 'system')).toBe(false);
-  });
-  it('system (incl. AI) never moves medicine cases', () => {
-    for (const r of medicineAssistanceMachine.rules) expect(r.actors).not.toContain('system');
   });
   it('raises DomainError instances', () => {
     try {

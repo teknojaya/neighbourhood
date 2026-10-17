@@ -21,7 +21,7 @@ export const ApiRoutes = {
   requests: `${API_PREFIX}/requests`,
   loans: `${API_PREFIX}/loans`,
   needs: `${API_PREFIX}/needs`,
+  ask: `${API_PREFIX}/ask`,
   conversations: `${API_PREFIX}/conversations`,
   notifications: `${API_PREFIX}/notifications`,
-  medicineAssistance: `${API_PREFIX}/medicine-assistance`,
 } as const;

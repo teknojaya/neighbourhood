@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { IdSchema, IsoDateSchema, IsoDateTimeSchema } from '../common.js';
+import { IdSchema, IsoDateSchema, IsoDateTimeSchema, pageOf } from '../common.js';
 import { DonationRequestStatusSchema, LoanStatusSchema } from '../domain/machines.js';
 
 // ------------------------------------------------------- Donation requests
@@ -16,8 +16,12 @@ export const DonationRequestSchema = z.object({
   conversationId: IdSchema.nullable(),
   createdAt: IsoDateTimeSchema,
   updatedAt: IsoDateTimeSchema,
+  /** Optional additions for activity cards; actions are resolved by the server. */
+  listingTitle: z.string().max(100).optional(),
+  allowedActions: z.array(DonationRequestStatusSchema.exclude(['pending', 'expired'])).optional(),
 });
 export type DonationRequest = z.infer<typeof DonationRequestSchema>;
+export const DonationRequestPageSchema = pageOf(DonationRequestSchema);
 
 /** POST /api/v1/requests (Idempotency-Key header required). requesterId comes from the token. */
 export const CreateDonationRequestBodySchema = z.strictObject({

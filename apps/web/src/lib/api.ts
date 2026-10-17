@@ -19,6 +19,8 @@ export class ApiError extends Error {
 interface RequestOptions<T extends z.ZodType> {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
+  /** Private image upload; kept out of JSON and chat history payloads. */
+  binaryBody?: Blob;
   /** Validates the response against the shared contract. */
   schema: T;
   idempotencyKey?: string;
@@ -39,6 +41,7 @@ export async function api<T extends z.ZodType>(path: string, opts: RequestOption
   const user = getFirebaseAuth()?.currentUser;
   if (user) headers.Authorization = `Bearer ${await user.getIdToken()}`;
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
+  if (opts.binaryBody) headers['Content-Type'] = opts.binaryBody.type;
   if (opts.idempotencyKey) headers['Idempotency-Key'] = opts.idempotencyKey;
 
   let res: Response;
@@ -46,7 +49,7 @@ export async function api<T extends z.ZodType>(path: string, opts: RequestOption
     res = await fetch(path, {
       method,
       headers,
-      body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+      body: opts.binaryBody ?? (opts.body === undefined ? undefined : JSON.stringify(opts.body)),
       signal: opts.signal,
       cache: 'no-store',
       credentials: 'omit',
@@ -73,3 +76,13 @@ export async function api<T extends z.ZodType>(path: string, opts: RequestOption
 }
 
 export const newIdempotencyKey = () => crypto.randomUUID().replaceAll('-', '');
+
+/** Authenticated image reads use blobs so no bearer token appears in an image URL. */
+export async function privateImage(path: string, signal: AbortSignal): Promise<Blob> {
+  const user = getFirebaseAuth()?.currentUser;
+  const headers: Record<string, string> = {};
+  if (user) headers.Authorization = `Bearer ${await user.getIdToken()}`;
+  const response = await fetch(path, { headers, signal, cache: 'no-store', credentials: 'omit' });
+  if (!response.ok) throw new ApiError('BAD_RESPONSE', 'Photo is unavailable', response.status);
+  return response.blob();
+}

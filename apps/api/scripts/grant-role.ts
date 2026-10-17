@@ -3,7 +3,7 @@
  * There is intentionally no HTTP endpoint for this. The user must have
  * signed in at least once (so their `users` row exists).
  *
- *   npm run grant-role -w @neighbourhood/api -- <email> <staff|medicine_partner> [--revoke]
+ *   npm run grant-role -w @neighbourhood/api -- <email> <staff|product_category_editor> [--revoke]
  */
 import { PlatformRoleSchema } from '@neighbourhood/shared';
 import { loadConfig } from '../src/config.js';
@@ -12,7 +12,7 @@ import { createDb } from '../src/lib/db.js';
 const [emailArg, roleArg, flag] = process.argv.slice(2);
 const role = PlatformRoleSchema.safeParse(roleArg);
 if (!emailArg || !role.success) {
-  console.error('Usage: grant-role <email> <staff|medicine_partner> [--revoke]');
+  console.error('Usage: grant-role <email> <staff|product_category_editor> [--revoke]');
   process.exit(1);
 }
 

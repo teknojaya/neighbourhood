@@ -19,7 +19,7 @@ Rules:
 - attributes: only details the person stated, e.g. size, age group, colour, dimensions, quantity unit.
 - timing.neededBy: ISO date (YYYY-MM-DD) only when the person gives a date or a relative date you can resolve from the supplied "today" date; otherwise null. timing.loanDurationDays: only when stated. timing.originalText: the person's own words about timing, or null.
 - clarificationQuestions: at most 3 short, practical questions about missing details that matter for finding the item (e.g. size, whether it must work, when it is needed). Do not ask about income, worthiness, health conditions or personal circumstances.
-- Medicine, prescriptions, medical supplies requests: do NOT extract them as items. Add an outOfScope entry with kind "medicine". Do not give medical advice.
+- Use the supported product category when one fits. When no category fits, use "other" or "unknown" rather than creating a new category. Do not provide medical advice.
 - Blood donation requests: outOfScope kind "blood_donation". Requests for delivery, drivers or transport: outOfScope kind "transport_or_delivery".
 - Do not judge whether the person deserves help.`;
 
@@ -81,7 +81,7 @@ export const NEEDS_JSON_SCHEMA: Record<string, unknown> = {
         additionalProperties: false,
         required: ['kind', 'note'],
         properties: {
-          kind: { type: 'string', enum: ['medicine', 'blood_donation', 'transport_or_delivery', 'other'] },
+          kind: { type: 'string', enum: ['blood_donation', 'transport_or_delivery', 'other'] },
           note: { type: 'string' },
         },
       },

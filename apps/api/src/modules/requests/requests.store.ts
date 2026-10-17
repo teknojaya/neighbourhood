@@ -27,8 +27,8 @@ import { PrismaAccessRepository, hasCommunityRole } from '../auth/access.js';
 export class DonationRequestsStore {
   constructor(private readonly db: Db) {}
 
-  async create(input: { listingId: string; requesterId: string; quantity: number; message: string }) {
-    const listing = await this.db.listing.findUnique({
+  async create(input: { listingId: string; requesterId: string; quantity: number; message: string }, tx: Db | Tx = this.db) {
+    const listing = await tx.listing.findUnique({
       where: { id: input.listingId },
       select: { ownerId: true, status: true, mode: true },
     });
@@ -37,7 +37,7 @@ export class DonationRequestsStore {
     }
     assertNotSelfRequest(listing.ownerId, input.requesterId);
     try {
-      return await this.db.donationRequest.create({
+      return await tx.donationRequest.create({
         data: { ...input, ownerId: listing.ownerId },
       });
     } catch (err) {
@@ -49,24 +49,26 @@ export class DonationRequestsStore {
   }
 
   transition(requestId: string, actorUserId: string, to: Exclude<DonationRequestStatus, 'pending'>, opts: { pickupBy?: Date } = {}) {
-    return this.db.$transaction(async (tx) => {
-      const rows = await tx.$queryRaw<Array<{ id: string; listing_id: string; owner_id: string; requester_id: string; quantity: number; status: DonationRequestStatus }>>`
-        SELECT id, listing_id, owner_id, requester_id, quantity, status
-        FROM donation_requests WHERE id = ${requestId}::uuid FOR UPDATE`;
-      const req = rows[0];
-      if (!req) throw new DomainError('BAD_REQUEST', 'Request not found');
+    return this.db.$transaction((tx) => this.transitionInTransaction(tx, requestId, actorUserId, to, opts));
+  }
 
-      const actor = actorUserId === 'system' ? 'system' : await resolveActor(tx, actorUserId, req);
-      assertTransition(donationRequestMachine, req.status, to, actor);
+  async transitionInTransaction(tx: Tx, requestId: string, actorUserId: string, to: Exclude<DonationRequestStatus, 'pending'>, opts: { pickupBy?: Date } = {}) {
+    const rows = await tx.$queryRaw<Array<{ id: string; listing_id: string; owner_id: string; requester_id: string; quantity: number; status: DonationRequestStatus }>>`
+      SELECT id, listing_id, owner_id, requester_id, quantity, status
+      FROM donation_requests WHERE id = ${requestId}::uuid FOR UPDATE`;
+    const req = rows[0];
+    if (!req) throw new DomainError('BAD_REQUEST', 'Request not found');
 
-      if (to === 'approved') await reserve(tx, req.listing_id, req.quantity);
-      else if (req.status === 'approved' && (to === 'cancelled' || to === 'expired')) await release(tx, req.listing_id, req.quantity);
-      else if (to === 'collected') await collect(tx, req.listing_id, req.quantity);
+    const actor = actorUserId === 'system' ? 'system' : await resolveActor(tx, actorUserId, req);
+    assertTransition(donationRequestMachine, req.status, to, actor);
 
-      return tx.donationRequest.update({
-        where: { id: requestId },
-        data: { status: to, ...(to === 'approved' && opts.pickupBy ? { pickupBy: opts.pickupBy } : {}) },
-      });
+    if (to === 'approved') await reserve(tx, req.listing_id, req.quantity);
+    else if (req.status === 'approved' && (to === 'cancelled' || to === 'expired')) await release(tx, req.listing_id, req.quantity);
+    else if (to === 'collected') await collect(tx, req.listing_id, req.quantity);
+
+    return tx.donationRequest.update({
+      where: { id: requestId },
+      data: { status: to, ...(to === 'approved' && opts.pickupBy ? { pickupBy: opts.pickupBy } : {}) },
     });
   }
 }

@@ -3,7 +3,7 @@
  * (precached build assets + index.html for navigations) is cached.
  *
  * Never cached: authenticated API responses, chat, pickup addresses,
- * medicine information, uploaded images or any third-party request.
+ * private information, uploaded images or any third-party request.
  * The API also sends `Cache-Control: no-store` as a second line of defence.
  */
 export const NEVER_CACHE_PATH_PATTERNS: readonly RegExp[] = [/^\/api\//, /^\/healthz$/, /^\/__\//];

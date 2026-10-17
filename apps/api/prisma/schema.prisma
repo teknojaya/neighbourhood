@@ -146,6 +146,8 @@ model User {
   loansLent         Loan[]      @relation("Lender")
   conversations     ConversationParticipant[]
   messages          Message[]
+  conversationAttachments ConversationAttachment[]
+  savedListings     SavedListing[]
   notifications     Notification[]
   pushTokens        PushToken[]
   needs             Need[]
@@ -339,6 +341,7 @@ model Listing {
   photos           ListingPhoto[]
   requests         DonationRequest[]
   loans            Loan[]
+  savedBy          SavedListing[]
 
   @@index([status, geohash])
   @@index([ownerId, updatedAt])
@@ -429,6 +432,7 @@ model Conversation {
   loan              Loan?     @relation(fields: [loanId], references: [id], onDelete: Cascade)
   participants      ConversationParticipant[]
   messages          Message[]
+  attachments       ConversationAttachment[]
 
   @@map("conversations")
 }
@@ -453,9 +457,43 @@ model Message {
   createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender         User         @relation(fields: [senderId], references: [id])
+  attachments    ConversationAttachment[]
 
   @@index([conversationId, createdAt(sort: Desc), id(sort: Desc)])
   @@map("messages")
+}
+
+model ConversationAttachment {
+  id             String @id @default(uuid()) @db.Uuid
+  conversationId String @map("conversation_id") @db.Uuid
+  uploaderId     String @map("uploader_id") @db.Uuid
+  messageId      String? @map("message_id") @db.Uuid
+  storagePath    String @unique @map("storage_path") @db.VarChar(300)
+  mimeType       String @map("mime_type") @db.VarChar(40)
+  size           Int
+  uploadKey      String @map("upload_key") @db.VarChar(128)
+  sourceHash     String @map("source_hash") @db.VarChar(64)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  uploader       User @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  message        Message? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  @@unique([conversationId, uploaderId, uploadKey], map: "conversation_attachments_conversation_id_uploader_id_upload_key")
+  @@index([messageId])
+  @@index([conversationId, uploaderId, createdAt], map: "conversation_attachments_conversation_id_uploader_id_created_at")
+  @@map("conversation_attachments")
+}
+
+model SavedListing {
+  id        String @id @default(uuid()) @db.Uuid
+  userId    String @map("user_id") @db.Uuid
+  listingId String @map("listing_id") @db.Uuid
+  title     String @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  @@unique([userId, listingId])
+  @@index([userId, createdAt, id])
+  @@map("saved_listings")
 }
 
 // -------------------------------------------------------- notifications

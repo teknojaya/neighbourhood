@@ -21,6 +21,7 @@ try {
   const result = await new MaintenanceService(db, process.env.PUSH_ENABLED === 'true' && !config.firebase.useEmulators ? new FcmPushSender(getMessaging(app)) : null).run();
   const ask = new PrismaAskService(db, null, config.firebase.storageBucket ? new FirebaseAskImageStorage(getStorage(app), config.firebase.storageBucket) : null, { requests: new PrismaRequestsService(db), needs: new PrismaNeedsService(db), conversations: new PrismaConversationsService(db), notifications: new PrismaNotificationsService(db) });
   const sessions = await ask.purgeDeletedSessions(), orphaned = await ask.purgeOrphanedImages();
+  await new PrismaConversationsService(db, config.firebase.storageBucket ? new FirebaseAskImageStorage(getStorage(app), config.firebase.storageBucket, 'conversation-attachments/') : null).cleanupAttachments();
   if (config.firebase.storageBucket) {
     const bucket = new FirebaseObjectStorage(getStorage(app), config.firebase.storageBucket);
     for await (const photo of bucket.candidates()) if (Number.isFinite(photo.createdAt.getTime()) && Date.now() - photo.createdAt.getTime() > 86_400_000 && await db.listingPhoto.count({ where: { storagePath: photo.path } }) === 0) await bucket.remove(photo.path);

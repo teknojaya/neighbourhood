@@ -49,7 +49,8 @@ one of these local account buttons; no password is required by the emulator:
 | newcomer | Nina Sari | Resident with a pending membership in the second community |
 
 Every account has a complete profile/location, incoming and outgoing requests,
-loans, conversations, read/unread updates, three saved needs, Ask history, an
+loans, conversations, read/unread updates, three saved needs, three bookmarked
+items, Ask history, an
 image input and deposits. Use Activity to inspect pending, approved, collected,
 rejected, cancelled and expired requests. Loans cover pending, approved,
 checked-out, returned, rejected and cancelled states. Sharing points have pending
@@ -67,6 +68,11 @@ Try Ask: “Find a sewing machine within 3 km”, then “Use 20 km”, or reque
 absent item. Cards distinguish the requested radius from the wider check, show
 farther matches separately and offer radius replies. No result within 50 km is
 not a claim that the item does not exist anywhere.
+
+Saved items is available from Profile or Saved needs. Try saving/removing an
+actual product with its bookmark. In a neighbour conversation, use + to send
+your own photo; unsent photos remain private to the uploader. Re-running the
+seed restores its three sample bookmarks if removed.
 
 For a fresh independent scenario without resetting existing work:
 

@@ -1,10 +1,11 @@
-import { DomainError } from '@neighbourhood/shared';
+import { DomainError, type Message } from '@neighbourhood/shared';
+import { messagePhotoDto } from './conversation.photos.js';
 import type { Db, Tx } from '../../lib/db.js';
 import { HttpError } from '../../lib/http.js';
 import { beforeCursor, decodeCursor, pageRows } from '../../lib/pagination.js';
 
 export interface MessagePage {
-  items: Array<{ id: string; conversationId: string; senderId: string; body: string; createdAt: string }>;
+  items: Message[];
   nextCursor: string | null;
 }
 /**
@@ -71,6 +72,7 @@ export class ConversationsStore {
     if (!member) throw new HttpError('NOT_FOUND', 'Conversation not found');
     const cursor = opts.cursor ? decodeCursor(opts.cursor) : null;
     const rows = await this.db.message.findMany({
+      include: { attachments: true },
       where: {
         conversationId,
         ...beforeCursor(cursor),
@@ -80,7 +82,7 @@ export class ConversationsStore {
     });
     const page = pageRows(rows, opts.limit);
     return {
-      items: page.items.map((m) => ({ id: m.id, conversationId: m.conversationId, senderId: m.senderId, body: m.body, createdAt: m.createdAt.toISOString() })),
+      items: page.items.map((m) => ({ id: m.id, conversationId: m.conversationId, senderId: m.senderId, body: m.body, attachments: m.attachments.map(messagePhotoDto), createdAt: m.createdAt.toISOString() })),
       nextCursor: page.nextCursor,
     };
   }

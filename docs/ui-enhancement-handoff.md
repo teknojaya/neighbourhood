@@ -1,5 +1,22 @@
 # Mobile-first UI enhancement
 
+Latest follow-up, 2026-10-18: Ask uses one-question conversational clarification;
+product results collapse and no longer repeat answered radius choices. Clothing
+category synonyms fix missed generic searches. Messages add product thumbnails,
+a back chevron and private photo attachments. Saved items add private listing
+bookmarks, separate from Saved needs. Migration
+`20261018010000_saved_items_message_photos` is required and applied locally.
+See [Messages and saved items](conversation-and-saved-items.md).
+
+Verification for this follow-up: 96 unit tests, type checks, lint and API/PWA
+build passed; 52 PostgreSQL integration tests passed, including approval-only
+bookmark operations and message-photo access/idempotency. The real Gemini Ask
+smoke, two-browser conversation/bookmark smoke and 19-capture UI refinement
+smoke passed. Phone widths 320/440 and desktop 1440 were inspected. The bounded
+visual correction removes competing draft forms during a clarification. The
+single detector pass found only the incumbent 11px listing-form advisory. Local
+seed accounts were populated with bookmarks. No PR or production deployment.
+
 Branch: `feat/mobile-first-ui`, starting at integration commit `78930d6`. No PR or deployment. This pass preserves the integrated marketplace write and storage contracts and adds one authorized unread-count endpoint; it requires no new migration or environment variable.
 
 ## What changed

@@ -307,3 +307,15 @@ Seeded products may use the repository's generated household photos as authorize
 - **Don't** use synthetic item imagery or invented counts as evidence of live inventory or unread activity.
 
 Not canonized: isolated 10–11px badge/helper text, legacy uppercase planned-module badges and bespoke compact form controls are carried implementation exceptions, not new global type or control standards. This record does not repair source or expand the finish verdict into full-app accessibility certification; physical keyboard and screen-reader testing remain unverified.
+
+## Conversational clarification and personal items
+
+Ask asks one casual question at a time through normal chat; optional reply pills
+remain shortcuts. Draft/review forms do not compete with a clarification in the
+same turn. Older product results collapse and can be reopened, retaining photos
+and bookmarks while hiding stale radius prompts. Counts and availability come
+from the product cards. Messages use the existing dock with a back chevron,
+related product thumbnail and the shared attachment +. Pending photos preview
+with Remove; failures retain retry/remove. Saved items bookmark real listings
+and have a separate page from Saved needs. These refinements retain existing
+tokens, palette, type and mobile navigation.

@@ -63,6 +63,7 @@ export function ProfilePage() {
   return (
     <div className="space-y-4">
       <PageHeading title={profile?.displayName ? t('profile.title') : t('profile.setupTitle')}>Your neighbourhood, preferences and account.</PageHeading>
+      <Link to="/saved-items" className="inline-flex min-h-11 items-center text-sm font-semibold text-brand-800 underline">Saved items</Link>
       <div className="flex flex-wrap gap-x-5 gap-y-1 border-b border-stone-200 pb-3 text-sm font-semibold text-brand-800"><Link className="inline-flex min-h-11 items-center underline" to="/needs/saved">Saved needs</Link><Link className="inline-flex min-h-11 items-center underline" to="/communities">Communities & points</Link><Link className="inline-flex min-h-11 items-center underline" to="/categories">Product categories</Link></div>
       {me.data?.email && <p className="text-sm text-stone-600">{t('profile.email', { email: me.data.email })}</p>}
       {profile && !profile.displayName && <Alert tone="info">{t('profile.needsName')}</Alert>}

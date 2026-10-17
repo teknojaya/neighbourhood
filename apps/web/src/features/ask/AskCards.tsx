@@ -14,6 +14,7 @@ import { featureError } from '../activity/feature-errors';
 import { useOnline } from '../../lib/useOnline';
 
 const marketplaceTitles = {
+  saved_item_add: 'Save this item', saved_item_remove: 'Remove this saved item',
   listing_publish: 'Publish this item', listing_edit: 'Update this item',
   listing_transition: 'Change listing availability', photo_delete: 'Remove this photo',
   loan_request: 'Request a loan', loan_transition: 'Update this loan',
@@ -42,11 +43,11 @@ export function PrivatePhoto({ sessionId, attachment }: { sessionId: string; att
     : <span className="flex h-28 w-28 flex-col items-center justify-center gap-1 rounded-xl bg-stone-100 p-2 text-xs">{failed ? t('ask.photoUnavailable') : t('common.loading')}{failed && <button type="button" className="min-h-11 text-brand-800 underline" onClick={() => setAttempt(value => value + 1)}>Retry photo</button>}</span>;
 }
 
-export function AskCard({ part, sessionId, onEditDraft, onReply, disabled = false }: { part: AskPart; sessionId: string; onEditDraft(): void; onReply(text: string): void; disabled?: boolean }) {
+export function AskCard({ part, sessionId, onEditDraft, onReply, disabled = false, active = true, radiusAnswered = false }: { part: AskPart; sessionId: string; onEditDraft(): void; onReply(text: string): void; disabled?: boolean; active?: boolean; radiusAnswered?: boolean }) {
   switch (part.kind) {
-    case 'questions': return <QuestionCard part={part} onReply={onReply} disabled={disabled} />;
+    case 'questions': return <QuestionCard part={part} onReply={onReply} disabled={disabled} active={active} />;
     case 'matches': return <Card className="space-y-3"><h3 className="font-semibold">Matches for your saved need</h3>{part.items.length === 0 && <p>No matches nearby yet.</p>}{part.items.map(item => <Link className="block border-t py-3" key={item.listing.id} to={'/listings/' + item.listing.id}><strong>{item.listing.title}</strong><p className="text-sm">{item.reason}</p>{item.missingInfo.map((info,i) => <p className="text-xs text-stone-600" key={i}>{info}</p>)}</Link>)}</Card>;
-    case 'listings': return <SearchListingCard part={part} onReply={onReply} />;
+    case 'listings': return <SearchListingCard part={part} onReply={onReply} active={active} radiusAnswered={radiusAnswered} />;
     case 'loans': return <Card>{part.items.length === 0 && <p>No loans yet.</p>}{part.items.map(item => <Link className="block py-3" key={item.id} to={'/activity?loan=' + item.id}>{item.listingTitle} · {item.status}<p className="text-sm">{item.startDate} → {item.endDate}{item.overdue ? ' · Overdue' : ''}</p></Link>)}</Card>;
     case 'communities': return <Card>{part.items.map(item => <div key={item.id}><Link className="block py-3" to={'/communities?community=' + item.id}><strong>{item.name}</strong><p>{item.areaLabel} · {item.memberCount} members</p></Link><PointDraft communityId={item.id} sessionId={sessionId} /></div>)}</Card>;
     case 'points': return <Card>{part.items.map(item => <Link className="block py-3" key={item.id} to={'/communities?point=' + item.id}><strong>{item.name}</strong><p>{item.publicAddress ?? item.location.areaLabel}</p></Link>)}</Card>;
@@ -110,6 +111,8 @@ function ActionCard({ action, sessionId }: { action: AskAction; sessionId: strin
       void queryClient.invalidateQueries({ queryKey: ['notifications'] });
       void queryClient.invalidateQueries({ queryKey: ['loans'] });
       void queryClient.invalidateQueries({ queryKey: ['my-listings'] });
+      void queryClient.invalidateQueries({ queryKey: ['saved-item-ids'] });
+      void queryClient.invalidateQueries({ queryKey: ['saved-items'] });
     },
   });
   const isMarketplaceHandover = action.payload.kind === 'marketplace' && ((action.payload.action.operation === 'loan_transition' && ['checked_out', 'returned'].includes(action.payload.action.body.to)) || action.payload.action.operation === 'deposit_review' || action.payload.action.operation === 'stock_adjust');

@@ -33,7 +33,7 @@ export async function normalizeImage(bytes: Buffer, mimeType: string) {
 
 /** Files are accessed only through authenticated Ask routes, never public URLs. */
 export class FirebaseAskImageStorage implements AskImageStorage {
-  constructor(private readonly storage: Storage, private readonly bucket: string) {}
+  constructor(private readonly storage: Storage, private readonly bucket: string, private readonly prefix = 'ask-attachments/') {}
   async write(path: string, bytes: Buffer, mimeType: string) {
     await this.storage.bucket(this.bucket).file(path).save(bytes, { resumable: false, metadata: { contentType: mimeType, cacheControl: 'private, no-store' } });
   }
@@ -43,7 +43,7 @@ export class FirebaseAskImageStorage implements AskImageStorage {
   }
   async delete(path: string) { await this.storage.bucket(this.bucket).file(path).delete({ ignoreNotFound: true }); }
   async *candidates() {
-    for await (const file of this.storage.bucket(this.bucket).getFilesStream({ prefix: 'ask-attachments/' })) {
+    for await (const file of this.storage.bucket(this.bucket).getFilesStream({ prefix: this.prefix })) {
       if (file.metadata.timeCreated) yield { path: file.name as string, createdAt: new Date(file.metadata.timeCreated) };
     }
   }

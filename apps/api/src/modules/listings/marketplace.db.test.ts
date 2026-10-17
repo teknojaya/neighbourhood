@@ -58,6 +58,50 @@ afterAll(async () => {
   await db.$disconnect();
 });
 describe('integrated marketplace against PostgreSQL', () => {
+  it('matches broad clothing words and keeps bookmarks private, idempotent and removable after unavailability', async () => {
+    const f = await fixture(); const item = await f.listings.createListing(f.owner.id, { ...body(), title: 'Cotton jackets', description: 'Two cotton outer layers.', category: 'clothing' }, randomUUID());
+    for (const query of ['clothes','pakaian','baju']) expect(await f.listings.searchListings({ searcherId: f.neighbour.id, center: body().exactLocation, radiusKm: 3, query, limit: 10 })).toMatchObject([{ id: item.id }]);
+    expect(await f.listings.searchListings({ searcherId: f.neighbour.id, center: body().exactLocation, radiusKm: 3, query: 'red jackets', limit: 10 })).toEqual([]);
+    await request(f.app).put('/api/v1/saved-items/' + item.id).set('Authorization', bearer(f.neighbour.firebaseUid)).expect(200);
+    await request(f.app).put('/api/v1/saved-items/' + item.id).set('Authorization', bearer(f.neighbour.firebaseUid)).expect(200);
+    expect(await db.savedListing.count({ where: { userId: f.neighbour.id } })).toBe(1);
+    expect((await request(f.app).get('/api/v1/saved-items/ids').set('Authorization', bearer(f.outsider.firebaseUid)).expect(200)).body.ids).toEqual([]);
+    expect((await request(f.app).get('/api/v1/saved-items').set('Authorization', bearer(f.neighbour.firebaseUid)).expect(200)).body.items[0].listing.id).toBe(item.id);
+    await request(f.app).delete('/api/v1/saved-items/' + item.id).set('Authorization', bearer(f.neighbour.firebaseUid)).expect(200);
+    const session = await f.ask.create(f.neighbour.id, randomUUID());
+    const proposal = await f.ask.prepareFromUi(f.neighbour.id, session.id, randomUUID(), { operation: 'saved_item_add', listingId: item.id });
+    expect(await db.savedListing.count({ where: { userId: f.neighbour.id } })).toBe(0);
+    await expect(f.ask.confirm(f.outsider.id, proposal.id, proposal.revision)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await f.ask.confirm(f.neighbour.id, proposal.id, proposal.revision); await f.ask.confirm(f.neighbour.id, proposal.id, proposal.revision);
+    expect(await db.savedListing.count({ where: { userId: f.neighbour.id } })).toBe(1);
+    await f.listings.transitionStatus(f.owner.id, item.id, 'paused');
+    expect((await request(f.app).get('/api/v1/saved-items').set('Authorization', bearer(f.neighbour.firebaseUid)).expect(200)).body.items[0]).toMatchObject({ title: 'Cotton jackets', listing: null });
+    const removal = await f.ask.prepareFromUi(f.neighbour.id, session.id, randomUUID(), { operation: 'saved_item_remove', listingId: item.id });
+    expect(await db.savedListing.count({ where: { userId: f.neighbour.id } })).toBe(1);
+    await f.ask.confirm(f.neighbour.id, removal.id, removal.revision);
+    expect(await db.savedListing.count({ where: { userId: f.neighbour.id } })).toBe(0);
+  });
+
+  it('isolates private message photos, exposes product thumbnails and attaches exactly once to an authorized message', async () => {
+    const f = await fixture(); const item = await f.listings.createListing(f.owner.id, body(), randomUUID());
+    const bytes = await sharp({ create: { width: 4, height: 4, channels: 3, background: 'green' } }).png().toBuffer(); await f.listings.uploadPhoto(f.owner.id, item.id, bytes, 'image/png', randomUUID());
+    const conversationId = (await f.requests.create(f.neighbour.id, randomUUID(), { listingId: item.id, quantity: 1, message: '' })).body.conversationId!;
+    const files = new Map<string, Buffer>(); const images = { write: async (path: string, data: Buffer) => { files.set(path, data); }, read: async (path: string) => { const data = files.get(path); if (!data) throw new Error('missing'); return data; }, delete: async (path: string) => { files.delete(path); } };
+    const chat = new PrismaConversationsService(db, images, f.storage); const key = randomUUID();
+    expect(await chat.get(f.neighbour.id, conversationId)).toMatchObject({ listingId: item.id, listingPhotoUrl: expect.any(String), imagesAvailable: true });
+    const photo = await chat.upload(f.neighbour.id, conversationId, bytes, 'image/png', key); expect(await chat.upload(f.neighbour.id, conversationId, bytes, 'image/png', key)).toEqual(photo); expect(files.size).toBe(1);
+    await expect(chat.image(f.owner.id, conversationId, photo.id)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(chat.image(f.outsider.id, conversationId, photo.id)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(chat.send(f.owner.id, randomUUID(), conversationId, 'Cannot steal pending upload', [photo.id])).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    const sendKey = randomUUID(); const sent = await chat.send(f.neighbour.id, sendKey, conversationId, '', [photo.id]); expect(await chat.send(f.neighbour.id, sendKey, conversationId, '', [photo.id])).toEqual(sent);
+    expect(sent.body.attachments).toEqual([photo]); expect((await chat.image(f.owner.id, conversationId, photo.id)).mimeType).toBe('image/webp');
+    expect((await chat.messages(f.owner.id, conversationId, { limit: 10 })).items.find(message => message.id === sent.body.id)?.attachments).toEqual([photo]);
+    await expect(chat.removeAttachment(f.neighbour.id, conversationId, photo.id)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    const pending = await chat.upload(f.neighbour.id, conversationId, bytes, 'image/png', randomUUID()); await chat.removeAttachment(f.neighbour.id, conversationId, pending.id); expect(files.size).toBe(1);
+    await db.conversation.update({ where: { id: conversationId }, data: { closed: true } });
+    await expect(chat.upload(f.neighbour.id, conversationId, bytes, 'image/png', randomUUID())).rejects.toMatchObject({ code: 'CONFLICT' });
+    await expect(chat.send(f.neighbour.id, randomUUID(), conversationId, 'Closed')).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
   it('prepares publication with scoped draft photos, publishes only after approval and renews history photo grants', async () => {
     const f = await fixture(); const files = new Map<string, Buffer>();
     const images = { write: async (path: string, bytes: Buffer) => { files.set(path, bytes); }, read: async (path: string) => { const bytes = files.get(path); if (!bytes) throw new Error('missing object'); return bytes; }, delete: async (path: string) => { files.delete(path); } };

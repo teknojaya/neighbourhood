@@ -20,23 +20,31 @@ export const ConversationSchema = z.object({
   closed: z.boolean(),
   unreadCount: z.number().int().nonnegative().optional(),
   listingTitle: z.string().max(100).optional(),
+  listingId: z.uuid().optional(),
+  listingPhotoUrl: z.string().optional(),
+  imagesAvailable: z.boolean().optional(),
+  pendingAttachments: z.array(z.object({ id: z.uuid(), name: z.string(), mimeType: z.enum(['image/jpeg','image/png','image/webp']), size: z.number().int().positive() })).max(2).optional(),
 });
 export type Conversation = z.infer<typeof ConversationSchema>;
 export const ConversationPageSchema = pageOf(ConversationSchema);
 
+export const MessageAttachmentSchema = z.object({ id: z.uuid(), name: z.string(), mimeType: z.enum(['image/jpeg','image/png','image/webp']), size: z.number().int().positive().max(4194304) });
+export type MessageAttachment = z.infer<typeof MessageAttachmentSchema>;
 export const MessageSchema = z.object({
   id: IdSchema,
   conversationId: IdSchema,
   senderId: z.string(),
   body: z.string().min(1).max(2000),
   createdAt: IsoDateTimeSchema,
+  attachments: z.array(MessageAttachmentSchema).max(2).default([]),
 });
 export type Message = z.infer<typeof MessageSchema>;
 export const MessagePageSchema = pageOf(MessageSchema);
 
 export const SendMessageBodySchema = z.strictObject({
-  body: z.string().trim().min(1).max(2000),
-});
+  body: z.string().trim().max(2000),
+  attachmentIds: z.array(z.uuid()).max(2).default([]),
+}).refine(value => value.body.length > 0 || value.attachmentIds.length > 0, { message: 'Add a message or photo' });
 /** Read only through a message actually displayed by the client. */
 export const MarkConversationReadBodySchema = z.strictObject({ throughMessageId: z.uuid() });
 

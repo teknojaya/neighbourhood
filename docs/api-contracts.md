@@ -50,12 +50,28 @@ Important integration contracts:
   snapshots. Partial text replaces the prior snapshot. A disconnect does not
   approve an action or implicitly resend the message; durable detail/stop and
   idempotent client-message IDs remain the recovery path.
-- Ask `questions` parts contain one to four questions with choices and free-text
-  answers. Listing drafts add optional defaulted `maxLoanDays`, `attachmentIds`
+- Ask `questions` parts retain legacy one-to-four question compatibility, but
+  new turns emit only the first question and wait for a normal chat answer.
+  Listing drafts add optional defaulted `maxLoanDays`, `attachmentIds`
   and attachment metadata, preserving old history compatibility. Publication
   tools prepare approval cards; only the confirm endpoint performs the write.
   Historical listing/match photo URLs are renewed when detail is loaded.
 - `STORAGE_UNAVAILABLE` (503) identifies unavailable Ask upload storage.
+- `GET /saved-items/ids` returns caller-owned bookmark listing IDs. `GET
+  /saved-items` returns paged `{ id, listingId, title, createdAt, listing }`
+  bookmarks with fresh product DTOs; `listing` is null when unavailable. `PUT`
+  and `DELETE /saved-items/:listingId` are idempotent caller-scoped toggles.
+  Ask adds `saved_item_add`/`saved_item_remove` approval operations and a
+  read-only `list_saved_items` tool.
+- Conversation DTOs add optional `listingId`, `listingPhotoUrl`,
+  `imagesAvailable` and own `pendingAttachments`. `POST
+  /conversations/:id/attachments` accepts raw JPEG/PNG/WebP under 4 MB with an
+  idempotency key. Authenticated `GET`/`DELETE .../attachments/:attachmentId`
+  read photos or remove own pending photos. Only uploader reads pending photos;
+  only participants read sent photos. Message bodies accept `attachmentIds`
+  (up to two) and text or photos; photo-only messages store the body `Photo`.
+  Message DTOs include attachment metadata without bucket paths.
+  Migration: `20261018010000_saved_items_message_photos`.
 - `POST /ask/actions/:id/confirm`: `{ revision }`; repeat confirmation returns
   the same outcome. Cancel is separate. Stale listing edits are rejected.
 - `POST /listings/:id/photos`: raw JPEG/PNG/WebP with `Content-Type` and

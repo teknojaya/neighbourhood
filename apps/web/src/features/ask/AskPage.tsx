@@ -18,6 +18,14 @@ import { AskCard, PrivatePhoto } from './AskCards';
 import { createRetryKey } from '../activity/retry-key';
 import { streamAsk } from '../../lib/askStream';
 
+function answeredSearchRadius(messages: AskMessage[], before: number) {
+  const history = messages.filter(message => message.sequence < before);
+  return history.some((message, index) => message.role === 'user' && (
+    /\b\d{1,2}\s*(?:km|kilomet(?:er|re)s?)\b/i.test(message.text)
+    || /^\s*\d{1,2}\s*$/.test(message.text) && /radius|distance|how far|jarak|seberapa jauh/i.test(history[index - 1]?.text ?? '')
+  ));
+}
+
 export function AskPage() {
   const [params, setParams] = useSearchParams();
   const sessionId = params.get('chat');
@@ -183,8 +191,8 @@ function AskChat({ sessionId, ensureSession, available, imagesAvailable, onDelet
       {messages.map((message) => <article key={message.id} className={`space-y-3 ${message.role === 'user' ? 'ml-6 rounded-2xl bg-brand-50 p-3' : 'mr-2'}`}>
         <p className="text-xs font-semibold text-stone-500">{message.role === 'user' ? t('ask.you') : t('ask.assistant')}</p>
         {sessionId && message.attachments.length > 0 && <div className="flex flex-wrap gap-2">{message.attachments.map((attachment) => <PrivatePhoto key={attachment.id} sessionId={sessionId} attachment={attachment} />)}</div>}
-        {message.text && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.text}</p>}
-        {sessionId && message.parts.map((part, index) => <AskCard key={index} part={part} sessionId={sessionId} disabled={isRunning} onReply={reply => { setText(reply); inputRef.current?.focus(); }} onEditDraft={() => { setText(t('ask.editDraftPrompt')); inputRef.current?.focus(); }} />)}
+        {message.text && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.text === 'Before I continue:' ? message.parts.flatMap(part => part.kind === 'questions' ? part.questions.map(question => question.question) : []).join('\n\n') || message.text : message.text}</p>}
+        {sessionId && message.parts.filter(part => !message.parts.some(item => item.kind === 'questions') || !['listing_draft', 'action'].includes(part.kind)).map((part, index) => <AskCard key={index} part={part} sessionId={sessionId} disabled={isRunning} active={!messages.some(next => next.role === 'user' && next.sequence > message.sequence) && !optimistic} radiusAnswered={answeredSearchRadius(messages, message.sequence)} onReply={reply => { setText(reply); inputRef.current?.focus(); }} onEditDraft={() => { setText(t('ask.editDraftPrompt')); inputRef.current?.focus(); }} />)}
       </article>)}
       {optimistic && detail.data?.latestRun?.clientMessageId !== optimistic.body.clientMessageId && <article className="ml-6 space-y-3 rounded-2xl bg-brand-50 p-3"><p className="text-xs font-semibold text-stone-500">{t('ask.you')}</p>{sessionId && <div className="flex flex-wrap gap-2">{optimistic.attachments.map(photo => <PrivatePhoto key={photo.id} sessionId={sessionId} attachment={photo} />)}</div>}<p className="whitespace-pre-wrap break-words text-sm">{optimistic.body.text}</p></article>}
       {isRunning && <div className="mr-2 space-y-2" aria-label="Assistant response"><p role="status" className="text-sm text-brand-800">{({ thinking: 'Thinking…', searching: 'Looking nearby…', reading: 'Checking your activity…', preparing: 'Preparing your next step…', answering: 'Writing a reply…' } as const)[activeRun?.progress ?? 'thinking']}</p>{activeRun?.partialText && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{activeRun.partialText}</p>}</div>}

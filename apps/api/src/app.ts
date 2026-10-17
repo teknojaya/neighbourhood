@@ -21,6 +21,7 @@ import { authPublicRouter } from './modules/email-otp/otp.routes.js';
 import type { EmailOtpService } from './modules/email-otp/otp.service.js';
 import { conversationsRouter } from './modules/conversations/conversations.routes.js';
 import { listingsRouter } from './modules/listings/listings.routes.js';
+import { savedItemsRouter } from './modules/listings/saved-items.routes.js';
 import { loansRouter } from './modules/loans/loans.routes.js';
 import { needsRouter } from './modules/needs/needs.routes.js';
 import type { NeedsService } from './modules/needs/needs.service.js';
@@ -141,6 +142,7 @@ export function createApp(deps: AppDeps): Express {
   api.use(aiRouter(deps.ai, { matching: deps.matching, photo: deps.ask ? (userId, sessionId, attachmentId) => deps.ask!.image(userId, sessionId, attachmentId) : undefined }));
   if (deps.ask) api.use(askRouter(deps.ask));
   api.use(listingsRouter(deps.listings));
+  if (deps.db && deps.listings) api.use(savedItemsRouter(deps.db, deps.listings));
   api.use(communitiesRouter(deps.communities));
   api.use(requestsRouter(deps.requests));
   api.use(loansRouter(deps.loans));

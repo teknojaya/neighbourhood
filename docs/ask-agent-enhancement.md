@@ -13,11 +13,13 @@ repeat a turn or approve a write; reopening the chat recovers its state. Polling
 remains a recovery path for a running turn after disconnection or navigation.
 Deployments must allow response streaming and avoid buffering this route.
 
-For a new task, the agent asks one to four focused questions about missing facts
-before proceeding. A question card offers short choices and free-text answers;
-Use these answers drafts an editable message. Fully specified follow-ups and
-read-only product help can proceed immediately. The server gives clarification
-priority if a model attempts questions and marketplace operations together.
+For a new task, the agent asks one casual question about the next missing fact,
+waits for a normal chat answer, then asks another only if needed. Known facts
+and corrections stay in context. Optional reply pills fill the ordinary composer;
+there is no questionnaire form. The server emits only the first question even
+if a model proposes a batch. Fully specified follow-ups and read-only product
+help can proceed immediately. The server gives clarification priority if a
+model attempts questions and marketplace operations together.
 Question answers never count as approval to execute a marketplace write.
 
 ## Photos and publication
@@ -46,7 +48,10 @@ Question answers never count as approval to execute a marketplace write.
   bucket with stable upload keys. Repeated confirmation creates one listing and
   one copy of each photo. A completed receipt links to the published item.
 
-No database migration or new environment key is needed. Storage failures use
+The initial streaming pass needed no migration. The conversational follow-up
+requires `20261018010000_saved_items_message_photos`; run
+`npm run db:deploy -w @neighbourhood/api` before starting the updated API. No new environment key is
+needed. Storage failures use
 `STORAGE_UNAVAILABLE`, rather than suggesting sign-in configuration is missing.
 Local Auth, Storage, PostgreSQL and Gemini must be available to exercise the full
 flow. The changes remain on the UI enhancement branch; no deployment is implied.
@@ -59,15 +64,16 @@ Run the normal checks and PostgreSQL suite, then, with local services running:
 npm run smoke:ask-agent
 ```
 
-This creates a disposable account, verifies first-upload preview, interactive
-question choices, a photographed draft, an approval card before any listing
-exists, confirmation, bucket photo copying, reload, streamed partial text and
-the published item's photo. It removes its own account, records and objects.
+This creates a disposable account and verifies first-upload preview, sequential
+Q&A through normal chat, a photographed draft, an approval card before any
+listing exists, confirmation, bucket photo copying, reload, streamed partial
+text, clothing discovery and collapsible history without stale radius prompts.
+It removes its own account, records and objects.
 Browser captures are ignored under `apps/web/.impeccable/review/ask-agent`.
 Map tiles are intercepted with labelled synthetic tiles. Native camera picker
 behavior still needs a physical-device check; the harness exercises file input.
 
-Verified locally: 96 unit tests and the production/PWA build passed; 50 PostgreSQL
+Verified locally in the initial streaming pass: 96 unit tests and the production/PWA build passed; 50 PostgreSQL
 integration tests passed, including authenticated streaming before completion,
 question priority over a simultaneous proposed action, legacy draft photo
 recovery, approval-only publication, idempotent photo copying, a missing-photo
@@ -77,3 +83,21 @@ UI refinement harness passed. Phone widths 320/440 and desktop 1440 were checked
 The single Impeccable detector pass had no primary findings; its one advisory is
 an existing 11px hint in the shared listing form. Existing bundle/PWA warnings
 remain. No production mutation, deployment or PR was created.
+
+## Conversational discovery and saved products
+
+Older product results collapse when a newer user message arrives and can be
+reopened. Radius choices appear only on the active result when the conversation
+has not already supplied a distance. A wider check with no matches
+never promises that widening will help. Generic category names such as clothes,
+pakaian and baju resolve to clothing; specific attributes remain literal.
+
+Saved items bookmark actual listings; Saved needs describe things still being
+sought. Item cards, details and Ask results have explicit bookmark buttons.
+Open `/saved-items` from Profile or Saved needs. These private bookmarks survive
+chat deletion, do not reserve stock, and show a removable title if an item
+becomes unavailable. Ask can list bookmarks and prepare save/remove approval
+cards. Direct bookmark buttons are explicit user actions and apply immediately.
+
+See [Messages and saved items](conversation-and-saved-items.md) for photo privacy,
+migration and the two-browser smoke check.

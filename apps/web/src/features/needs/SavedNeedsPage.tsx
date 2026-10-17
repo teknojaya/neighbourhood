@@ -25,6 +25,7 @@ export function SavedNeedsPage() {
   return <div className="space-y-4">
     <PageHeading title={t('needs.savedTitle')}>Keep what you’re looking for here, even after deleting a chat. Find matches whenever you’re ready.</PageHeading>
     <Link to="/needs" className="inline-flex min-h-11 items-center text-sm font-semibold text-brand-800 underline">Ask for something</Link>
+    <Link to="/saved-items" className="ml-4 inline-flex min-h-11 items-center text-sm font-semibold text-brand-800 underline">Saved items</Link>
     {saved.isPending && <Skeleton />}
     {saved.isError && <Alert tone="error">{featureError(saved.error)}</Alert>}
     {remove.isError && <Alert tone="error">{featureError(remove.error)}</Alert>}

@@ -188,7 +188,8 @@ export class PrismaAskService {
         }
         contents.push({ role: 'user', parts: results });
         // A question card hands control to the resident; do not process their answer in this turn.
-        if (cards.some(card => card.kind === 'questions')) { finalText = 'Before I continue:'; break; }
+        const question = cards.find(card => card.kind === 'questions');
+        if (question?.kind === 'questions') { finalText = question.questions[0]!.question; break; }
       }
       if (!finalText && !cards.length) throw new HttpError('AI_INVALID_OUTPUT', 'The assistant reached its turn limit');
       await this.db.$transaction(async (tx) => {

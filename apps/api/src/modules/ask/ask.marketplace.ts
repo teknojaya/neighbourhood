@@ -14,6 +14,8 @@ export interface MarketplaceServices { listings: ListingsService; loans: LoansSe
 export async function executeMarketplace(db: Db, services: MarketplaceServices, userId: string, key: string, action: MarketplaceAction) {
   const { listings, loans, communities } = services;
   switch (action.operation) {
+    case 'saved_item_add': await runIdempotent(db, userId, key, 'ask:saved-item-add', action, async tx => { const { listing } = await listings.getListingDetail(userId, action.listingId); await tx.savedListing.upsert({ where: { userId_listingId: { userId, listingId: action.listingId } }, create: { userId, listingId: action.listingId, title: listing.title }, update: {} }); return { status: 200, body: { saved: true } }; }); return { message: 'Item saved', link: '/saved-items' };
+    case 'saved_item_remove': await runIdempotent(db, userId, key, 'ask:saved-item-remove', action, async tx => { await tx.savedListing.deleteMany({ where: { userId, listingId: action.listingId } }); return { status: 200, body: { saved: false } }; }); return { message: 'Item removed from saved items', link: '/saved-items' };
     case 'listing_publish': { const listing = await listings.createListing(userId, action.body, key); return { message: 'Listing published', link: `/listings/${listing.id}` }; }
     case 'listing_edit': await listings.updateListing(userId, action.listingId, action.body, key, action.expectedUpdatedAt); return { message: 'Listing updated', link: `/listings/${action.listingId}` };
     case 'listing_transition': await listings.transitionStatus(userId, action.listingId, action.body.to, key, action.expectedUpdatedAt); return { message: `Listing ${action.body.to}`, link: `/listings/${action.listingId}` };
@@ -41,6 +43,8 @@ export const publicToolResult = (result: unknown, parts: AskPart[]) => ({ result
 export async function authorizeProposal(db: Db, market: MarketplaceServices, userId: string, action: MarketplaceAction): Promise<MarketplaceAction> {
   const access = new PrismaAccessRepository(db);
   switch (action.operation) {
+    case 'saved_item_add': await market.listings.getListingDetail(userId, action.listingId); break;
+    case 'saved_item_remove': if (!await db.savedListing.count({ where: { userId, listingId: action.listingId } })) throw new HttpError('NOT_FOUND', 'Saved item not found'); break;
     case 'listing_edit': case 'listing_transition': { const { listing } = await market.listings.getListingDetail(userId, action.listingId); if (listing.ownerId !== userId) throw new HttpError('FORBIDDEN', 'Only the owner can manage this item'); return { ...action, expectedUpdatedAt: listing.updatedAt }; }
     case 'loan_request': { const { listing } = await market.listings.getListingDetail(userId, action.body.listingId); if (listing.mode !== 'lend' || listing.status !== 'active' || listing.ownerId === userId) throw new HttpError('CONFLICT', 'Item cannot be borrowed'); break; }
     case 'photo_delete': { const { listing } = await market.listings.getListingDetail(userId, action.listingId); if (listing.ownerId !== userId || !listing.photos.some(photo => photo.id === action.photoId)) throw new HttpError('NOT_FOUND', 'Photo unavailable'); break; }
@@ -62,6 +66,8 @@ export async function authorizeProposal(db: Db, market: MarketplaceServices, use
 export async function marketplaceSummary(db: Db, market: MarketplaceServices, userId: string, action: MarketplaceAction): Promise<string> {
   let text = action.operation.replaceAll('_', ' ');
   switch (action.operation) {
+    case 'saved_item_add': text = `Save ${(await market.listings.getListingDetail(userId, action.listingId)).listing.title}`; break;
+    case 'saved_item_remove': text = `Remove ${(await db.savedListing.findFirstOrThrow({ where: { userId, listingId: action.listingId } })).title} from saved items`; break;
     case 'listing_publish': text = `Publish ${action.body.title} × ${action.body.quantity}`; break;
     case 'listing_edit': case 'listing_transition': case 'photo_delete': { const { listing } = await market.listings.getListingDetail(userId, action.listingId); text = action.operation === 'listing_transition' ? `${action.body.to}: ${listing.title}` : action.operation === 'photo_delete' ? `Remove photo ${listing.photos.findIndex(p => p.id === action.photoId) + 1} from ${listing.title}` : `Edit ${listing.title}`; break; }
     case 'loan_request': text = `Borrow ${(await market.listings.getListingDetail(userId, action.body.listingId)).listing.title}`; break;

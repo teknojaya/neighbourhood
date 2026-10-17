@@ -91,7 +91,7 @@ describe('Ask sessions, agent tools and confirmed actions against PostgreSQL', (
     const f = await fixture(new FakeModel((_contents, call) => call === 1 ? { role: 'model', parts: [...prepare('prepare_save_need', { extraction }).parts!, ...prepare('ask_questions', { questions: [{ question: 'Give away or lend?', options: ['Give away', 'Lend'] }, { question: 'What condition?', options: ['Good', 'Fair'] }] }).parts!] } : call === 2 ? prepare('draft_listing', { title: 'Cotton jackets', category: 'clothing', mode: 'donate', condition: 'good', quantity: 2, description: 'Two jackets.' }) : call === 4 ? prepare('draft_listing', { title: 'Two cotton jackets' }) : reply));
     const photo = await f.ask.upload(f.user.id, f.session.id, await sharp({ create: { width: 3, height: 3, channels: 3, background: 'green' } }).png().toBuffer(), 'image/png');
     await f.ask.send(f.user.id, f.session.id, { ...send('I want to share these'), attachmentIds: [photo.id] });
-    expect((await f.ask.detail(f.user.id, f.session.id)).messages.items.at(-1)?.parts[0]).toMatchObject({ kind: 'questions', questions: [{ question: 'Give away or lend?' }, { question: 'What condition?' }] });
+    expect((await f.ask.detail(f.user.id, f.session.id)).messages.items.at(-1)?.parts[0]).toMatchObject({ kind: 'questions', questions: [{ question: 'Give away or lend?' }] });
     expect(await db.askAction.count({ where: { sessionId: f.session.id } })).toBe(0); expect(f.model.calls).toHaveLength(1);
     await f.ask.send(f.user.id, f.session.id, send('Give away two good jackets.'));
     // A draft written by the older app has no explicit photo field.

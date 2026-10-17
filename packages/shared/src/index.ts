@@ -12,6 +12,7 @@ export * from './contracts/listings.js';
 export * from './contracts/requests-loans.js';
 export * from './contracts/communities.js';
 export * from './contracts/messaging.js';
+export * from './contracts/saved-items.js';
 export * from './contracts/needs.js';
 export * from './contracts/ask.js';
 export * from './ai/contracts.js';

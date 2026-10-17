@@ -6,6 +6,7 @@ import { HttpError } from '../../lib/http.js';
 import type { ObjectStorage } from '../../lib/storage.js';
 import { runIdempotent } from '../requests/idempotency.js';
 import { normalizeImage } from '../ask/ask.images.js';
+import { normalizeListingSearch } from './search-terms.js';
 import { searchNearbyListings } from './listings.repository.js';
 
 const include = { owner: { select: { displayName: true } }, photos: { orderBy: { position: 'asc' as const } } };
@@ -100,7 +101,7 @@ export class ListingsService {
     return ListingPrivateSchema.parse({ listingId: id, exactLocation: { lat: row.lat, lng: row.lng }, geohash: row.geohash, pickupInstructions: row.private?.pickupInstructions ?? '', contactNote: row.private?.contactNote ?? null });
   }
   async searchListings(params: { searcherId?: string; center: { lat: number; lng: number }; radiusKm: number; category?: ItemCategory; mode?: ListingMode; query?: string; limit: number }) {
-    const rows = await searchNearbyListings(this.db, { ...params, excludeOwnerId: params.searcherId });
+    const rows = await searchNearbyListings(this.db, { ...params, ...normalizeListingSearch(params), excludeOwnerId: params.searcherId });
     const full = await this.db.listing.findMany({ where: { id: { in: rows.map(r => r.id) }, status: 'active' }, include });
     const byId = new Map(full.map(row => [row.id, row]));
     return Promise.all(rows.flatMap(row => { const found = byId.get(row.id); return found ? [this.dto(found, row.distanceKm)] : []; }));

@@ -83,13 +83,13 @@ function main() {
   const listings = new ListingsService(db, photoStorage);
   const matching = new MatchingService(db, listings, generator);
 
-  const services = { loans: new LoansService(db), communities: new CommunitiesService(db), needs: new PrismaNeedsService(db), requests: new PrismaRequestsService(db), conversations: new PrismaConversationsService(db), notifications: new PrismaNotificationsService(db) };
+  const services = { loans: new LoansService(db), communities: new CommunitiesService(db), needs: new PrismaNeedsService(db), requests: new PrismaRequestsService(db), conversations: new PrismaConversationsService(db, config.firebase.storageBucket ? new FirebaseAskImageStorage(getStorage(firebaseApp), config.firebase.storageBucket, 'conversation-attachments/') : null, photoStorage), notifications: new PrismaNotificationsService(db) };
   const askServices = { ...services, marketplace: { listings, loans: services.loans, communities: services.communities, matching }, listings: { get: async (userId: string, id: string) => (await listings.getListingDetail(userId, id)).listing } };
   const ask = new PrismaAskService(db, config.gemini ? new GeminiAskModel(config.gemini.model, config.gemini.apiKey) : null,
     config.firebase.storageBucket ? new FirebaseAskImageStorage(getStorage(firebaseApp), config.firebase.storageBucket) : null, askServices);
   // Storage cleanup is retryable; soft-deleted chats are never readable meanwhile.
   void ask.purgeDeletedSessions().catch(() => logger.warn('ask_cleanup_unavailable'));
-  const cleanup = setInterval(() => { void ask.purgeDeletedSessions().catch(() => logger.warn('ask_cleanup_unavailable')); }, 15 * 60_000);
+  const cleanup = setInterval(() => { void ask.purgeDeletedSessions().catch(() => logger.warn('ask_cleanup_unavailable')); void services.conversations.cleanupAttachments().catch(() => logger.warn('message_photo_cleanup_unavailable')); }, 15 * 60_000);
   cleanup.unref();
   const maintenance = new MaintenanceService(db, process.env.PUSH_ENABLED === 'true' && !config.firebase.useEmulators ? new FcmPushSender(getMessaging(firebaseApp)) : null);
   const jobs = setInterval(() => { void maintenance.run().catch(() => logger.warn('maintenance_retry_needed')); }, 60_000);

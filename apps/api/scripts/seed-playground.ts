@@ -86,6 +86,7 @@ try {
   const ask=new PrismaAskService(db,null,new FirebaseAskImageStorage(getStorage(app),config.firebase.storageBucket),{needs,requests,conversations,notifications});
   for(const who of audiences){
     const counterpart=who.id===owner.id?neighbour:owner;
+    for(const item of catalogRows.filter(item=>item.ownerId!==who.id).slice(0,3))await db.savedListing.upsert({where:{userId_listingId:{userId:who.id,listingId:item.id}},create:{userId:who.id,listingId:item.id,title:item.title},update:{}});
     for(const [index,status] of (['pending','approved','collected','rejected','cancelled','expired'] as const).entries()){
       for(const incoming of [false,true]){
         const giver=incoming?who:counterpart,receiver=incoming?counterpart:who;

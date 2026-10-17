@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import sharp from 'sharp';
+import { stubMapTiles } from './map-test-tiles.mjs';
 
 // Read-only visual/navigation checks against the local seeded demo. No Gemini calls or marketplace writes.
 const web = process.env.SMOKE_WEB_URL ?? 'http://localhost:5173';
@@ -14,6 +15,7 @@ const browser = await chromium.launch({ headless: true, channel: process.env.PLA
 const errors = []; const captures = [];
 let phase = 'setup';
 const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
+await stubMapTiles(context);
 const page = await context.newPage(); page.on('pageerror', error => errors.push(error.name));
 page.setDefaultTimeout(15000);
 async function navigate(route) { await page.goto(web + route); await page.locator('main h1,main h2').first().waitFor(); await page.waitForLoadState('networkidle'); assert.equal(await page.getByRole('status', { name: 'Loading', exact: true }).count(), 0, `${route}: capture still loading`); }

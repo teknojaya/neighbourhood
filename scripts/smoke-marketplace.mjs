@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { stubMapTiles } from './map-test-tiles.mjs';
 /* global document, innerWidth, window */
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -41,6 +42,7 @@ async function user(name) {
 }
 async function mobile(who) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await stubMapTiles(context);
   const page = await context.newPage(); const errors = []; page.on('pageerror', error => errors.push(error.name));
   // Route the test browser to its dedicated API, leaving any user's dev server alone.
   await page.route('**/api/v1/**', async route => { try { const source = new URL(route.request().url()); const response = await route.fetch({ url: new URL(source.pathname + source.search, base).href }); await route.fulfill({ response }); } catch { await route.abort().catch(() => undefined); } });

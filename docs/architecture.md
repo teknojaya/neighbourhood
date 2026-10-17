@@ -66,7 +66,8 @@ short-lived HMAC listing URLs. Direct client Storage access is denied. No
 unauthenticated upload route or local-disk production storage remains.
 
 The PWA service worker caches the app shell only; API responses are no-store.
-Explore lazy-loads Leaflet after Show map. Browser image requests load standard
+Explore lazy-loads Leaflet below its title once the saved location is available;
+the map starts open and can be hidden. Browser image requests load standard
 OpenStreetMap tiles with visible attribution and an origin-only cross-origin
 referrer policy. The map draws only the caller's saved point and radius; no
 exact listing/pickup pins or private model data are sent to the tile service.

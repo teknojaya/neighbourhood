@@ -39,7 +39,7 @@ export const PRODUCT_GUIDE = {
   location: {
     setup: 'Set a search location in Profile with device location or manual coordinates and save. Add a public neighbourhood/city/region label. Search uses the saved point, not an assumed live GPS location.',
     radiusKm: RADIUS_OPTIONS_KM,
-    map: 'Explore can show the caller’s own saved search location with the selected radius circle. Changing the radius updates the search and circle. Panning the map does not move the search centre; change it in Profile. No exact neighbour pickup pins are exposed.',
+    map: 'Explore opens with the caller’s saved search location and selected radius circle directly below its title. Search, offering, category and radius filters are below the map. Home also has a category dropdown beneath All/Free/Borrow; View all carries the offering and category into Explore. Changing the radius updates the search and circle. The map can be hidden. Panning does not move the search centre; change it in Profile. No exact neighbour pickup pins are exposed.',
     loading: 'Skeletons appear only while Profile or item data is loading. With no saved location, the item query is paused and a location setup state is shown. Settled zero results are an empty state, not an endless skeleton.',
   },
   chat: {

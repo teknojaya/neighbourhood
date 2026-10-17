@@ -51,8 +51,8 @@ actions or neighbours' eligibility. Direct browsing and forms remain available.
   explicitly replaced with ordinary product categories.
 - Search uses a confirmed location and 1/3/5/10 km radius. A neighbourhood label
   alone does not replace coordinates. Public locations are approximate.
-- Explore has an opt-in OpenStreetMap view of the resident's own saved search
-  point and selected radius. Panning does not move the search centre; Profile
+- Explore opens an OpenStreetMap view of the resident's own saved search
+  point and selected radius below its title; it can be hidden. Panning does not move the search centre; Profile
   changes it. Tile loading shares the viewed area with the provider; exact
   neighbour pickup locations are not drawn. No geocoding service is implemented.
 - Requests reserve/release/collect stock transactionally. Loans require dates,
@@ -112,5 +112,5 @@ belong in the subsequent design brief, not this product record.
 
 - Initial launch geography and the default UI language have not been confirmed.
 - Full bilingual UI, saved-need editing, geocoding and a production map provider
-  capacity plan remain open. The existing opt-in map uses public OSM tiles.
+  capacity plan remain open. The existing map uses public OSM tiles.
 - No formal accessibility certification or measured usability target is claimed.

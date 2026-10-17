@@ -248,6 +248,8 @@ Offering labels say **Free to keep** or **Borrow & return**, so color never bear
 
 Utility actions use the shared `ActionPill` or equivalent link class: a fully rounded white control, stone edge, deep-teal label, 44px minimum height and 18px outline icon. History, Saved needs, New chat and Home utilities keep visible words beside their icons. Status labels remain static; action pills remain buttons or links.
 
+Home places Community points and Saved needs above the Nearby items heading. Below that heading, All / Free / Borrow remain segmented offering controls; the category filter sits beneath them as a native select styled as a pill, with the box icon and selected category. Selecting All categories clears the filter. View all carries category and offering into Explore. Category administration remains accessible from Profile.
+
 ### Cards / Containers
 
 General cards are white with a stone edge, `2xl` corners and the card padding token. Listing cards clip their media and use 0.75rem detail padding; the whole card links to item details and its border turns teal on hover. Title and public area/distance wrap. Images load lazily; missing and broken photos show the outline box and **No photo yet** rather than synthetic product imagery. Nested general cards flatten through the global surface rule.
@@ -276,7 +278,7 @@ Home and Explore show item-shaped skeletons while the profile or enabled item qu
 
 ### Search area map
 
-Explore offers an opt-in map using the resident's saved search point. The white, stone-edged section retains `2xl` corners, a labelled Show/Hide map action and provider disclosure. The lazy map reserves 256px on phones and 288px on wider screens. A teal circle shows the selected kilometre radius; a small teal dot with a white edge marks the resident's saved point. Only this point is drawn. Fit radius restores the extent; Change location opens Profile. Attribution stays visible, and tile failure keeps the search usable with a Retry map action. Automated screenshot tiles are labelled synthetic and are not product imagery or evidence of provider availability.
+Explore opens the map directly below its title using the resident's saved search point. Search and filters follow below it. The white, stone-edged section retains `2xl` corners, a labelled Show/Hide map action and a Map & location disclosure. The lazy map reserves 256px on phones and 288px on wider screens. A teal circle shows the selected kilometre radius; a small teal dot with a white edge marks the resident's saved point. Only this point is drawn. Fit radius restores the extent; Change location opens Profile. Attribution stays visible, and tile failure keeps the search usable with a Retry map action. Automated screenshot tiles are labelled synthetic and are not product imagery or evidence of provider availability.
 
 ## Do's and Don'ts
 

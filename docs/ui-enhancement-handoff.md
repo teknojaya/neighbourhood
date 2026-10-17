@@ -96,3 +96,29 @@ The in-app browser was disabled in Work settings for this follow-up. Local Edge
 test harnesses supplied interaction/capture evidence. This extension does not
 claim a fresh independent finish verdict or physical iOS/Android camera and
 keyboard certification. No PR or deployment was created.
+
+## Follow-up: discovery order and category filtering
+
+The next two supplied phone screenshots and explicit request supersede the
+opt-in map default above. Explore now opens the saved-point/radius map directly
+below its title, with search, offering, category and radius controls underneath.
+Hide/Show map, Fit radius, attribution, retry and the Map & location disclosure
+remain available. With no saved point, the location setup state occupies that
+top position instead. No neighbour pickup pins are added.
+
+On Home, Community points and Saved needs now sit above Nearby items. A shared
+native category dropdown, styled as an icon pill, sits below All / Free /
+Borrow. The category actually filters the listing query; All categories clears
+it. View all carries both offering and category into Explore, whose URL keeps
+its selections on reload. Product category management is still linked from
+Profile. Ask's product guide and the design record describe this order.
+
+`npm run check` passed all 94 unit tests, type checking, lint and API/PWA builds.
+`npm run smoke:ui-refinements` passed with 17 captures, including Home shortcuts,
+the category query, combined-filter handoff, default map/order, URL restoration,
+radius and tile recovery, missing-location/loading states and the existing Ask
+controls. Phone widths 320/440 and desktop 1440 were inspected together. The
+single manual detector scan returned no findings. Browser map requests use
+labelled synthetic tiles, now shared by the navigation and marketplace smoke
+harnesses as well; automated checks do not contact OSM. No schema, migration or
+environment change was needed. Existing bundle/PWA warnings remain.

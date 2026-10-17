@@ -60,7 +60,7 @@ and `SMOKE_SCREENSHOT_DIR` for mobile captures. They remove only their fixtures.
   and inventory-backed donation listings.
 - Ask sessions/history, camera/photos, streamed progress, typed tools,
   review/confirm/cancel and recovery; direct forms remain available.
-- Ask product help and caller-role lookup, plus an opt-in Explore map of the
+- Ask product help and caller-role lookup, plus a default-open Explore map of the
   resident's saved search point/radius. Maps use attributed OpenStreetMap tiles
   without a new API key; search works when tiles fail. Automated map checks
   intercept tile requests with clearly labelled synthetic fixtures.

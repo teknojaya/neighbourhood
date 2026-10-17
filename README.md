@@ -13,13 +13,14 @@ recipients arrange their own transport. Built for the Google Cloud AI
 Builder Cup.
 
 - **Stack**: TypeScript · npm workspaces · React 19 + Vite + Tailwind 4 +
-  React Router + TanStack Query · Express 5 + Firebase Admin · Firestore,
+  React Router + TanStack Query · Express 5 + Firebase Admin · PostgreSQL/Prisma,
   Firebase Auth, Cloud Storage, FCM · Gemini Developer API (`@google/genai`)
   · Cloud Run.
 - **Docs**: [architecture](docs/architecture.md) ·
   [API contracts](docs/api-contracts.md) ·
   [module ownership](docs/module-ownership.md) ·
-  [implementation status](docs/implementation-status.md)
+  [implementation status](docs/implementation-status.md) ·
+  [Engineer 2 handoff](docs/engineer2-handoff.md)
 
 ```
 packages/shared   Zod schemas, DTOs, enums, state machines, domain rules, AI contracts
@@ -51,17 +52,20 @@ unavailable.
 Then, in two terminals:
 
 ```bash
-npm run emulators   # Auth :9099, Firestore :8085, Storage :9199, UI http://127.0.0.1:4000
+npm run emulators   # Auth :9099, Storage :9199, UI http://127.0.0.1:4000
 npm run dev         # shared (watch) + API http://localhost:8080 + web http://localhost:5173
 ```
 
-Open http://localhost:5173, create an account, set your profile (area,
-location or manual coordinates, radius) and try **Ask** (needs extraction).
+Open http://localhost:5173, sign in, set your profile (area,
+location or manual coordinates, radius) and try **Ask** (AI chat, private photo
+input, review cards and saved needs). For local photos, set
+`FIREBASE_STORAGE_EMULATOR_HOST=127.0.0.1:9199` in the API env alongside the
+Auth emulator host, `USE_FIREBASE_EMULATORS=true`, and demo project/bucket values.
 
 Granting a platform role locally (operator tool; no HTTP endpoint exists):
 
 ```bash
-npm run grant-role -w @neighbourhood/api -- <uid> staff            # or medicine_partner, add --revoke to remove
+npm run grant-role -w @neighbourhood/api -- <email> staff            # or product_category_editor; add --revoke to remove
 ```
 
 The uid is shown in the Emulator UI → Authentication.
@@ -80,9 +84,8 @@ non-`demo-*` project. The web app connects to the Auth emulator only in
 | Command | What it does |
 |---|---|
 | `npm run dev` | Build shared, then watch shared + API (tsx) + web (Vite, proxies `/api`) |
-| `npm run emulators` | Firebase emulators (fresh data each run) |
-| `npm run emulators:persist` | Emulators that import/export `.emulator-data/` (the folder must already exist from an earlier export; use `npx firebase emulators:export .emulator-data --project demo-neighbourhood` while emulators are running) |
-| `npm run smoke:emulator` | End-to-end check against running emulators + API: register, token, profile, 401/400 guards |
+| `npm run emulators` | Firebase Auth and Storage emulators (Java 21+; fresh data each run) |
+| `npm run smoke:ask -w @neighbourhood/api` | Live Gemini tools/images against local API, DB and demo emulators; removes its disposable fixtures |
 | `npm run typecheck` | `tsc --noEmit` for all workspaces (web app + service worker) |
 | `npm run lint` | ESLint (typescript-eslint, react-hooks) |
 | `npm test` | Vitest: shared domain rules, API auth/authorization/AI validation, SW cache policy |

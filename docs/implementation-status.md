@@ -1,11 +1,11 @@
 # Implementation status
 
-Last updated: 2026-10-17 (PostgreSQL + Google/email-OTP migration).
+Last updated: 2026-10-17 (Engineer 2 requests, communication, saved needs and Ask agent foundation).
 
 **Legend**: ✅ working and covered by tests · ⚙️ implemented, not yet tested live · 📄 contract only (endpoint returns 501) · ❌ not done
 
 ## Architecture now
-- **Database:** PostgreSQL 17 via Prisma 7 (`apps/api/prisma/schema.prisma`, two migrations). Local Docker: `docker-compose.yml`, port **55432**, because another PostgreSQL already uses 5432 on the dev machine. Production target: Cloud SQL.
+- **Database:** PostgreSQL 17 via Prisma 7 (`apps/api/prisma/schema.prisma`, five migrations). Local Docker: `docker-compose.yml`, port **55432**, because another PostgreSQL already uses 5432 on the dev machine. Production target: Cloud SQL.
 - **Firebase:** Authentication (Google + custom tokens), FCM and Cloud Storage only. Firestore and its rules, indexes and emulator have been removed.
 - **Login:** "Continue with Google", or a 6-digit email code. The server verifies the code and then issues a Firebase custom token, so both methods produce a Firebase ID token for **the same Firebase user per email**.
 
@@ -13,13 +13,14 @@ Last updated: 2026-10-17 (PostgreSQL + Google/email-OTP migration).
 | Check | Result |
 |---|---|
 | `npm run typecheck` / `lint` / `build` | ✅ pass |
-| `npm test` | ✅ 81 tests: shared 33, api 45, web 3 |
-| Prisma migrations against local Docker Postgres | ✅ applied (CHECK constraints, partial unique index, `btree_gist` exclusion constraint) |
-| **PostgreSQL integration tests** (radius search, stock, loan conflicts, chat) | **NOT WRITTEN / NOT RUN.** `npm run test:db` config exists; `src/test/db-global-setup.ts` and `*.db.test.ts` still need writing. |
+| `npm test` | ✅ 90 tests: shared 32, api 54, web 4 |
+| Prisma migrations against isolated local PostgreSQL 17 | ✅ five migrations applied (domain constraints, legacy category flow archival, Ask sessions/history/images/actions and upload retries) |
+| **PostgreSQL integration tests** | ✅ 35 tests cover Engineer 2 requests, stock, idempotency, private chat, inbox, saved needs and Ask sessions/tools/actions against isolated local PostgreSQL 17. Radius search and loan conflicts still need their own integration tests. |
 | **Live Google sign-in** | **NOT RUN.** |
 | **Live email OTP** | **NOT RUN.** SMTP is not configured, so the endpoint correctly reports "not configured". |
 | **Backend token verification against the real Firebase project** | **NOT RUN.** This machine has no Admin credentials (ADC); the server will answer `503 AUTH_NOT_CONFIGURED`. |
-| Live Gemini call | **NOT RUN.** |
+| Developer PostgreSQL migration deployment | ✅ all five migrations applied; schema up to date on the local database at port 5432 |
+| Live Gemini + local Auth/Storage emulators | ✅ real tool calls, edited need confirmation/replay, private photo upload/read/retry, image understanding, separate sessions, chat deletion preserving saved needs; disposable fixtures removed |
 | Docker image after this change | **NOT RUN** (last built before the PostgreSQL change). |
 
 ## What works (✅)
@@ -34,6 +35,15 @@ Last updated: 2026-10-17 (PostgreSQL + Google/email-OTP migration).
   - single use; delivery failures are reported honestly;
   - `GET /auth/methods` reports `email_delivery_not_configured` when SMTP is missing.
 - Gemini needs extraction (unchanged).
+- Engineer 2 donation request API: create, incoming/outgoing, detail and transitions, with atomic stock accounting, conversation creation, generic inbox events and 24-hour idempotency replay.
+- Participant-only chat endpoints, stable message paging and unread counts; read acknowledgements use a message the user has loaded.
+- In-app notification inbox and read acknowledgement.
+- Reviewed AI drafts can be saved as private needs and deleted; caller-only access and retry safety are covered by PostgreSQL tests.
+- Ask is now a conversational UI with private sessions/history, bounded Gemini function calls, private image attachments, persisted listing drafts and editable action cards. Tools reuse request/chat/inbox/needs services. See `docs/ask-agent-handoff.md` for exact capabilities and limits.
+- Photo decoding, metadata stripping, dimension limits, upload replay and authenticated image reads. Firebase Storage emulator verified; production Storage credentials remain unverified.
+- Separate saved-needs page, chat deletion independent of saved needs, and retryable deletion/orphan cleanup with the `cleanup:ask` maintenance command.
+- Web Activity, Messages and Notifications pages, plus an embeddable donation request form. Mobile-width browser smoke check passed at 390 px using mocked API responses.
+- Product categories replace the special assistance feature in the active UI, AI contracts and routes; historical case data is archived by migration.
 - Web: Google button with popup → redirect fallback; email code form, which shows an "unavailable" notice when OTP isn't configured; explicit "Link Google account" on the profile page.
 
 ## Implemented, not tested live (⚙️)
@@ -45,9 +55,10 @@ Last updated: 2026-10-17 (PostgreSQL + Google/email-OTP migration).
 - SMTP sender and the Firebase custom-token flow.
 
 ## Not done (❌)
-- PostgreSQL integration tests (highest priority).
-- Idempotency-Key middleware (the `idempotency_keys` table exists).
-- Listing/request/loan/chat/notification HTTP endpoints. They still return 501 and should be built on the stores above.
+- PostgreSQL integration tests for radius search and loan conflicts.
+- Listing and loan HTTP endpoints. They still return 501; Engineer 1 owns them.
+- Grounded matching, FCM token registration/delivery, and automatic request expiry. These remain Engineer 2 follow-up work.
+- Ask listing search/publication, loan and community tools wait for Engineer 1's services; token streaming and the remaining marketplace tool groups are not implemented. Gemini is configured in the ignored local API environment file.
 - `docs/architecture.md` and `docs/api-contracts.md` still describe Firestore in places (marked with a banner).
 - Cloud Run + Cloud SQL configuration is in the Dockerfile (`migrate` target) and `.env.example` only. No cloud resources were created.
 
@@ -58,5 +69,4 @@ Firebase Admin must also be able to mint custom tokens:
 - on Cloud Run: give the service account `roles/iam.serviceAccountTokenCreator` on itself.
 
 ## Known issues
-- `npm audit`: high findings via the firebase web SDK's Firestore dependency (`@grpc/grpc-js`). The app doesn't import Firestore.
 - The `nh-emu` container (Firestore emulator) is obsolete. Remove it with `docker rm -f nh-emu`.

@@ -91,11 +91,11 @@ registering, the client calls `PUT /me/profile` with `displayName`.
     "outOfScope": [] } }
 ```
 
-- `category`: one of the six item categories, `other` or `unknown`.
+- `category`: one of the six product categories, `other` or `unknown`.
   `preference`: `donation | borrow | either | unknown`. Unknown values stay
   `null` or `unknown`.
-- `outOfScope.kind`: `medicine` (UI links to the private medicine service),
-  `blood_donation` or `transport_or_delivery`. These are never extracted as items.
+- `outOfScope.kind`: `blood_donation` or `transport_or_delivery`.
+  Product needs use normal categories; unsupported categories remain `other` or `unknown`.
 - Errors: `503 AI_NOT_CONFIGURED`, `503 AI_MODEL_UNAVAILABLE`,
   `429 AI_QUOTA_EXCEEDED`/`RATE_LIMITED`, `504 AI_TIMEOUT`,
   `502 AI_INVALID_OUTPUT`, `422 AI_INPUT_REJECTED`, `400 VALIDATION_FAILED`
@@ -103,8 +103,8 @@ registering, the client calls `PUT /me/profile` with `displayName`.
 
 **Listing draft (contract)**: the user uploads an image to `uploads/{uid}/…`
 (≤ 4 MB, jpeg/png/webp) and posts its path. The response is a suggestion for
-the owner to edit. Null means "not visible/unknown". `safetyFlags` containing
-`medicine` blocks the listing and points to the partner flow.
+the owner to edit. Null means "not visible/unknown". `safetyFlags` covers
+hazardous items and other details for owner review.
 
 **Match explanations (contract)**: the server builds `MatchCandidate[]`
 (≤ 20) from eligible active listings in the radius (excluding the user's own).
@@ -133,14 +133,24 @@ null). `community_point` ⇒ `communityPointId`. Stock edits use `setTotalStock`
 
 | Method | Path | Body | Response | Status |
 |---|---|---|---|---|
-| POST | `/requests` | `CreateDonationRequestBodySchema` + `Idempotency-Key` | `DonationRequestSchema` | 🟡 |
-| GET | `/requests/incoming` · `/requests/outgoing` | page query | page of `DonationRequestSchema` | 🟡 |
-| GET | `/requests/:id` | – | `DonationRequestSchema` (participants only) | 🟡 |
-| POST | `/requests/:id/transition` | `DonationRequestTransitionBodySchema` + `Idempotency-Key` | `DonationRequestSchema` | 🟡 |
+| POST | `/requests` | `CreateDonationRequestBodySchema` + `Idempotency-Key` | `DonationRequestSchema` (201) | ✅ |
+| GET | `/requests/incoming` · `/requests/outgoing` | page query | `DonationRequestPageSchema` | ✅ |
+| GET | `/requests/:id` | – | `DonationRequestSchema` (owner, requester or active community volunteer) | ✅ |
+| POST | `/requests/:id/transition` | `DonationRequestTransitionBodySchema` + `Idempotency-Key` | `DonationRequestSchema` | ✅ |
 
 Errors: `SELF_REQUEST`, `INSUFFICIENT_STOCK` (at approval),
 `INVALID_TRANSITION`, `FORBIDDEN`, `CONFLICT` (duplicate active request,
 idempotency mismatch).
+
+Requests are for active **donation** listings. `pending` does not reserve stock;
+approval reserves, cancellation releases, and pickup confirmation moves reserved
+units to collected. Only the giver or an active volunteer may confirm pickup.
+The response adds `listingTitle` and server-computed `allowedActions` for the
+mobile activity screen. Community volunteers receive `conversationId: null`
+because private chat is limited to the giver and requester. A valid key is
+8–128 URL-safe characters. It is scoped to the user and saved for 24 hours;
+retries with the same path and parsed payload replay the saved status/body.
+Reusing a key for another payload or path returns `409 CONFLICT`.
 
 ## Loans (owner: Engineer 1, handover UI with Engineer 2)
 
@@ -169,43 +179,70 @@ confirmed by the lender, with an optional `returnConditionNote`.
 | POST | `/deposits/:id/review` | `ReviewDepositBodySchema` (volunteer) | `DepositSchema` | 🟡 |
 | POST | `/points/:id/adjustments` | stock adjustment (volunteer) | `StockAdjustmentSchema` | 🟡 |
 
+## Ask agent (owner: Engineer 2; Gemini adapter coordinated with Arung)
+
+All routes below are authenticated and implemented. AI sessions are private
+and separate from neighbour-to-neighbour conversations.
+
+| Method | Path | Body / query | Response |
+|---|---|---|---|
+| GET | `/ask/status` | – | `AskStatusSchema` |
+| GET | `/ask/sessions` | `PageQuerySchema` | `AskSessionPageSchema` |
+| POST | `/ask/sessions` | `AskCreateSessionBodySchema` (client UUID) | `AskSessionSchema` |
+| GET | `/ask/sessions/:id` | optional `before` message sequence | `AskSessionDetailSchema` |
+| POST | `/ask/sessions/:id/messages` | `AskSendBodySchema` (client message UUID) | `AskRunSchema`; history is persisted |
+| POST | `/ask/sessions/:id/stop` | – | 204 |
+| DELETE | `/ask/sessions/:id` | – | 204; domain records and saved needs remain |
+| POST | `/ask/sessions/:id/attachments` | raw image bytes + `Idempotency-Key` | `AskAttachmentSchema` |
+| GET | `/ask/sessions/:id/attachments/:attachmentId` | – | private image bytes |
+| DELETE | `/ask/sessions/:id/attachments/:attachmentId` | – | 204; unsent photos only |
+| PATCH | `/ask/actions/:id` | `AskEditNeedBodySchema` | `AskActionSchema` with new revision |
+| POST | `/ask/actions/:id/confirm` | `AskConfirmBodySchema` (displayed revision) | `AskActionSchema`; stored receipt on success |
+| POST | `/ask/actions/:id/cancel` | – | `AskActionSchema` |
+
+The server builds cards from authorized tool results. Model calls prepare
+actions only; confirmation invokes the existing domain services. See
+`docs/ask-agent-handoff.md` for budgets, image processing and recovery details.
+
 ## Needs (owner: Engineer 2)
 
 | Method | Path | Body | Response | Status |
 |---|---|---|---|---|
-| GET/POST | `/needs` | reviewed `NeedsExtraction` items | saved needs | 🟡 |
-| DELETE | `/needs/:id` | – | 204 | 🟡 |
+| GET | `/needs` | `PageQuerySchema` | `SavedNeedPageSchema` (caller only) | ✅ |
+| POST | `/needs` | `SaveNeedBodySchema`, `Idempotency-Key` | `SavedNeedSchema` | ✅ |
+| DELETE | `/needs/:id` | – | 204 (caller only) | ✅ |
 | GET | `/needs/:id/matches` | `radiusKm` | candidates + grounded explanations | 🟡 |
 
 ## Conversations (owner: Engineer 2)
 
 | Method | Path | Body | Response | Status |
 |---|---|---|---|---|
-| GET | `/conversations` | page query | page of `ConversationSchema` | 🟡 |
-| GET | `/conversations/:id/messages` | page query | page of `MessageSchema` | 🟡 |
-| POST | `/conversations/:id/messages` | `SendMessageBodySchema` | `MessageSchema` | 🟡 |
+| GET | `/conversations` | page query | `ConversationPageSchema` (includes `unreadCount`, `listingTitle`) | ✅ |
+| GET | `/conversations/:id` | – | `ConversationSchema` (participant only) | ✅ |
+| GET | `/conversations/:id/messages` | page query | `MessagePageSchema` (participant only) | ✅ |
+| POST | `/conversations/:id/messages` | `SendMessageBodySchema` + `Idempotency-Key` | `MessageSchema` (201) | ✅ |
+| POST | `/conversations/:id/read` | `MarkConversationReadBodySchema` | 204 | ✅ |
 
 A conversation is created by the server when a request or loan is created.
 Its participants are taken from that record.
+`/read` takes `{ "throughMessageId": "<loaded message UUID>" }` and never
+marks later, unseen messages read. Messages are visible only to participants.
 
 ## Notifications (owner: Engineer 2)
 
 | Method | Path | Body | Response | Status |
 |---|---|---|---|---|
-| GET | `/notifications` | page query | page of `NotificationSchema` | 🟡 |
-| POST | `/notifications/:id/read` | – | `NotificationSchema` | 🟡 |
+| GET | `/notifications` | page query | `NotificationPageSchema` | ✅ |
+| POST | `/notifications/:id/read` | – | `NotificationSchema` | ✅ |
 | POST | `/notifications/push-tokens` | `RegisterPushTokenBodySchema` | 204 | 🟡 |
 | DELETE | `/notifications/push-tokens/:tokenId` | – | 204 | 🟡 |
 
-## Medicine assistance (owner: Engineer 2) — private
+Request and message events create short, generic inbox entries in the same
+database transaction. FCM token registration and push delivery are still planned.
 
-| Method | Path | Body | Response | Status |
-|---|---|---|---|---|
-| POST | `/medicine-assistance` | `CreateMedicineAssistanceBodySchema` | `MedicineAssistanceCaseSchema` | 🟡 |
-| GET | `/medicine-assistance/mine` | – | cases | 🟡 |
-| POST | `/medicine-assistance/:id/withdraw` | – | case | 🟡 |
-| GET | `/partner/medicine-assistance` | – | cases assigned to the caller's partner org (`medicine_partner`) | 🟡 |
-| POST | `/partner/medicine-assistance/:id/transition` | `{ to }` | case | 🟡 |
+## Product categories (Engineer 1 listing contract; Engineer 2 discovery)
 
-There are no public medicine listings, medical advice, dosage information or
-AI processing. `consentToShareWithPartner` must be `true`.
+`ItemCategorySchema` is the single taxonomy for listing creation, filtering,
+needs extraction and matching. Category choice does not create a separate case
+or partner-review workflow. The web category page links into listing discovery;
+the `GET /listings` implementation is owned by Engineer 1.

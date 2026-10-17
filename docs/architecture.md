@@ -43,7 +43,7 @@ packages/shared/src
   enums.ts             categories, modes, conditions, roles
   geo.ts               radius options, geohash ranges, exact-distance search, privacy rounding
   routes.ts            canonical API paths
-  domain/              state machines (listing, request, loan, deposit, medicine), stock, loan rules
+  domain/              state machines (listing, request, loan, deposit), stock, loan rules
   contracts/           DTOs per module (profiles, listings, requests-loans, communities, messaging)
   ai/contracts.ts      AI limits, needs extraction, listing-draft and matching contracts + grounding
 apps/api/src
@@ -77,7 +77,7 @@ apps/web/src
   `req.auth = { uid, email, emailVerified }`. **Every** `/api/v1` route is
   behind it. A uid, role or owner id in a request body is never trusted; strict
   schemas reject unknown fields such as `uid` or `platformRoles`.
-- **Platform roles** (`staff`, `medicine_partner`) live in `userRoles/{uid}`
+- **Platform roles** (`staff`, `product_category_editor`) live in `user_roles`
   and are written only by the operator script `npm run grant-role -w
   @neighbourhood/api`. There is no HTTP endpoint for granting them.
 - **Community roles** (`member` < `volunteer` < `moderator`) live in
@@ -86,7 +86,7 @@ apps/web/src
   set member/volunteer for others in their community. Only staff can grant or
   remove moderator.
 - Helpers: `assertCommunityRole(access, uid, cid, 'volunteer')` and
-  `requirePlatformRole(access, 'medicine_partner')`.
+  `requirePlatformRole(access, 'product_category_editor')`.
 - **Community membership is separate from geography**. Nearby search uses
   the radius only; membership gates volunteer and moderator actions.
 
@@ -122,7 +122,6 @@ secret-like `VITE_` variable (GEMINI, SECRET, PRIVATE_KEY...) is present.
 | `stockAdjustments/{id}` | append-only inventory audit | point volunteers, staff |
 | `conversations/{id}` + `/messages/{mid}` | request/loan-linked chat | participants |
 | `notifications/{id}`, `pushTokens/{uid}/tokens/{tokenId}` | inbox, opt-in tokens | owner |
-| `medicineCases/{id}` | private medicine assistance | requester, assigned partner |
 | `idempotencyKeys/{uid}_{key}` | stored mutation results (TTL 24 h) | server |
 
 Listings store `geohash` (precision 9) of the **exact** location for querying.
@@ -155,7 +154,6 @@ resolves the actor from the verified uid and stored records, then calls
 | Donation request | pending → approved → collected; pending → rejected/cancelled/expired; approved → cancelled/expired | Only owner/volunteer approve or confirm collection. |
 | Loan | pending → approved → checked_out → returned; pending → rejected/cancelled; approved → cancelled | Overdue is derived (`isLoanOverdue`). The lender confirms the return. |
 | Deposit | proposed → accepted/rejected | Volunteer only. Stock is added on acceptance only. |
-| Medicine case | submitted → under_review → referred/closed; withdrawn | Verified partner staff only; never `system`/AI. |
 
 ### Approval and stock (atomic)
 
@@ -265,10 +263,10 @@ batches, each one in its own transaction. Not implemented yet.
   stripped. For matching, the server selects candidates (geo + eligibility).
   AI only explains them, and `groundMatchExplanations()` drops any listing id
   that was not supplied. AI never approves requests, alters stock, publishes
-  listings, reviews medicine cases or judges who deserves aid.
+  listings or judges who deserves aid.
 - **Privacy**: needs text is not logged or stored by the extraction endpoint,
   and responses are not cached by the client or the SW. Logs contain only
-  task, model, code, status and duration. Medicine cases are never sent to AI.
+  task, model, code, status and duration.
 - **Rate limiting** is in-memory per Cloud Run instance. With multiple
   instances the effective limit is N × 10/min. Gemini project quota is the
   global backstop. Move to a shared counter (a Firestore doc per uid/minute)
@@ -309,4 +307,4 @@ participant-only **read** rules (the commented block in `firestore.rules`):
 - Helmet sets the CSP (self + Firebase Auth/FCM/Storage endpoints) and
   `frame-ancestors 'none'`, and removes `x-powered-by`.
 - Logs are JSON lines (Cloud Logging severity). Never log request bodies,
-  needs text, medicine data, exact locations, tokens or keys.
+  needs text, private data, exact locations, tokens or keys.

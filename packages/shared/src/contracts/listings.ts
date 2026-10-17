@@ -34,8 +34,8 @@ export type ApplianceDetails = z.infer<typeof ApplianceDetailsSchema>;
 export const ListingPhotoSchema = z.object({
   /** Cloud Storage object path under listings/{listingId}/. */
   path: z.string().max(300),
-  /** Short-lived signed URL produced server-side. */
-  url: z.string().url().optional(),
+  /** Short-lived signed URL produced server-side or local storage endpoint. */
+  url: z.string().optional(),
 });
 
 export const LendingTermsSchema = z.object({
@@ -117,6 +117,24 @@ export const CreateListingBodySchema = z
     path: ['collection'],
   });
 export type CreateListingBody = z.infer<typeof CreateListingBodySchema>;
+
+export const UpdateListingBodySchema = z.strictObject({
+  title: z.string().trim().min(3).max(100).optional(),
+  description: z.string().trim().max(2000).optional(),
+  condition: ItemConditionSchema.optional(),
+  quantity: z.number().int().min(1).max(1000).optional(),
+  areaLabel: z.string().trim().min(2).max(120).optional(),
+  pickupInstructions: z.string().trim().max(1000).optional(),
+  appliance: ApplianceDetailsSchema.nullable().optional(),
+  lending: LendingTermsSchema.nullable().optional(),
+  bestBefore: z.iso.date().nullable().optional(),
+});
+export type UpdateListingBody = z.infer<typeof UpdateListingBodySchema>;
+
+export const CreateListingPhotoBodySchema = z.strictObject({
+  contentType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+});
+export type CreateListingPhotoBody = z.infer<typeof CreateListingPhotoBodySchema>;
 
 export const ListingTransitionBodySchema = z.strictObject({
   to: ListingStatusSchema,

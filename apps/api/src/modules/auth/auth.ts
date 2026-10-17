@@ -85,7 +85,10 @@ export class FirebaseTokenVerifier implements TokenVerifier {
         logger.error('auth_backend_not_configured', { code: (err as { code?: string }).code ?? 'unknown' });
         throw new HttpError('AUTH_NOT_CONFIGURED', 'Sign-in is not configured on this server');
       }
-      logger.info('auth_rejected', { reason: (err as { code?: string }).code ?? 'unknown' });
+      logger.info('auth_rejected', {
+        reason: (err as { code?: string }).code ?? 'unknown',
+        message: err instanceof Error ? err.message : String(err),
+      });
       throw new HttpError('UNAUTHENTICATED', 'Session is invalid or expired');
     }
   }

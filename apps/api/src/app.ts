@@ -21,6 +21,9 @@ import { notificationsRouter } from './modules/notifications/notifications.route
 import { profilesRouter } from './modules/profiles/profiles.routes.js';
 import type { ProfilesService } from './modules/profiles/profiles.service.js';
 import { requestsRouter } from './modules/requests/requests.routes.js';
+import type { ListingsService } from './modules/listings/listings.service.js';
+import { localStorageRouter } from './modules/storage/storage.routes.js';
+import type { LocalFileObjectStorage } from './lib/storage.js';
 
 export interface AppDeps {
   config: AppConfig;
@@ -30,6 +33,8 @@ export interface AppDeps {
   otp: EmailOtpService;
   profiles: ProfilesService;
   ai: AiService;
+  listings?: ListingsService;
+  localStorage?: LocalFileObjectStorage;
 }
 
 export function createApp(deps: AppDeps): Express {
@@ -97,12 +102,16 @@ export function createApp(deps: AppDeps): Express {
   api.use(express.json({ limit: '32kb' }));
   // Public sign-in support (auth methods, email OTP → Firebase custom token).
   api.use(authPublicRouter(deps.otp));
+  // Local storage routes (unauthenticated to mirror S3/GCS signed URL behavior)
+  if (deps.localStorage) {
+    api.use(localStorageRouter(deps.localStorage));
+  }
   // Every other /api/v1 route requires a verified Firebase ID token mapped to a PostgreSQL user.
   api.use(requireAuth(deps.tokenVerifier, deps.users));
 
   api.use(profilesRouter(deps.profiles));
   api.use(aiRouter(deps.ai));
-  api.use(listingsRouter());
+  api.use(listingsRouter(deps.listings));
   api.use(communitiesRouter());
   api.use(requestsRouter());
   api.use(loansRouter());

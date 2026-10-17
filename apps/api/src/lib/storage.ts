@@ -1,52 +1,38 @@
-import { AI_LIMITS } from '@neighbourhood/shared';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Storage } from 'firebase-admin/storage';
+import { HttpError } from './http.js';
 
 export interface ObjectStorage {
-  /** Short-lived URL for displaying a stored image. */
   signedReadUrl(path: string, ttlSeconds?: number): Promise<string>;
-  /** Short-lived PUT URL restricted to one content type and a size range. */
-  signedUploadUrl(path: string, contentType: string, ttlSeconds?: number): Promise<string>;
+  put(path: string, bytes: Buffer, mimeType: string): Promise<void>;
+  get(path: string): Promise<Buffer>;
+  remove(path: string): Promise<void>;
 }
+export const SAFE_PATH = /^listings\/[A-Za-z0-9_-]+\/[A-Za-z0-9._-]{1,120}$/;
 
-const SAFE_PATH = /^(uploads|listings)\/[A-Za-z0-9_-]+\/[A-Za-z0-9._-]{1,120}$/;
-
-/**
- * Cloud Storage for Firebase (images). Clients never get bucket access:
- * the API issues V4 signed URLs. Requires a credential that can sign
- * (service account key or iam.serviceAccounts.signBlob on Cloud Run).
+/** Bucket-backed in development and production. Uploads require authenticated
+ * ownership and decoding. Read grants expire; reload detail to renew them.
+ * Configure one shared signing secret for deployments with multiple instances.
  */
 export class FirebaseObjectStorage implements ObjectStorage {
-  constructor(
-    private readonly storage: Storage,
-    private readonly bucketName: string,
-  ) {}
-
-  async signedReadUrl(path: string, ttlSeconds = 15 * 60) {
+  constructor(private readonly storage: Storage, private readonly bucketName: string, private readonly secret: Buffer = randomBytes(32)) {}
+  private signature(path: string, expires: string) { return createHmac('sha256', this.secret).update(`${path}\n${expires}`).digest('hex'); }
+  async signedReadUrl(path: string, ttlSeconds = 900) {
     this.assertPath(path);
-    const [url] = await this.storage
-      .bucket(this.bucketName)
-      .file(path)
-      .getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + ttlSeconds * 1000 });
-    return url;
+    const expires = String(Date.now() + Math.min(ttlSeconds, 900) * 1000);
+    return `/api/v1/storage/file?path=${encodeURIComponent(path)}&expires=${expires}&signature=${this.signature(path, expires)}`;
   }
-
-  async signedUploadUrl(path: string, contentType: string, ttlSeconds = 10 * 60) {
+  verifyRead(path: string, expires: string, signature: string) {
     this.assertPath(path);
-    if (!(AI_LIMITS.imageMimeTypes as readonly string[]).includes(contentType)) throw new Error('Unsupported image type');
-    const [url] = await this.storage
-      .bucket(this.bucketName)
-      .file(path)
-      .getSignedUrl({
-        version: 'v4',
-        action: 'write',
-        contentType,
-        expires: Date.now() + ttlSeconds * 1000,
-        extensionHeaders: { 'x-goog-content-length-range': `1,${AI_LIMITS.imageMaxBytes}` },
-      });
-    return url;
+    if (!/^\d{13}$/.test(expires) || Number(expires) <= Date.now() || Number(expires) > Date.now() + 900_000 || !/^[a-f0-9]{64}$/.test(signature)
+      || !timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(this.signature(path, expires), 'hex'))) throw new HttpError('FORBIDDEN', 'Photo link has expired');
   }
-
-  private assertPath(path: string) {
-    if (!SAFE_PATH.test(path)) throw new Error('Invalid storage path');
+  async put(path: string, bytes: Buffer, mimeType: string) {
+    this.assertPath(path);
+    await this.storage.bucket(this.bucketName).file(path).save(bytes, { resumable: false, metadata: { contentType: mimeType, cacheControl: 'private, no-store' } });
   }
+  async get(path: string) { this.assertPath(path); return (await this.storage.bucket(this.bucketName).file(path).download())[0]; }
+  async remove(path: string) { this.assertPath(path); await this.storage.bucket(this.bucketName).file(path).delete({ ignoreNotFound: true }); }
+  async *candidates() { for await (const file of this.storage.bucket(this.bucketName).getFilesStream({ prefix: 'listings/' })) if (file.metadata.timeCreated) yield { path: file.name as string, createdAt: new Date(file.metadata.timeCreated) }; }
+  private assertPath(path: string) { if (!SAFE_PATH.test(path)) throw new HttpError('VALIDATION_FAILED', 'Invalid photo path'); }
 }

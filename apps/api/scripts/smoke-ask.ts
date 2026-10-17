@@ -56,8 +56,9 @@ try {
   assert(status.available && status.imagesAvailable, 'Configure Gemini and Storage before this test');
   const session = AskSessionSchema.parse(await api('/ask/sessions', 'POST', { clientId: randomUUID() }));
   phase = 'live saved-needs tool';
-  let detail = await send(session.id, 'Use list_saved_needs to show my saved needs.');
+  let detail = await send(session.id, 'Tampilkan kebutuhan tersimpan saya. Gunakan list_saved_needs.');
   assert(detail.messages.items.some(m => m.parts.some(p => p.kind === 'saved_needs' && p.items.length === 0)));
+  assert(detail.messages.items.some(m => m.role === 'assistant' && /kebutuhan|tersimpan|belum/i.test(m.text)), 'Expected Indonesian reply');
   report('PASS real Gemini tool call and persisted history');
 
   phase = 'live saved-need proposal';
@@ -91,6 +92,11 @@ try {
   detail = await send(session.id, 'Describe the color of this test image in English, briefly. Do not create a draft or action.', [photo.id]);
   assert(detail.messages.items.some(m => m.role === 'assistant' && /\bred\b/i.test(m.text)), 'Expected red image description');
   report('PASS real Gemini image understanding');
+
+  phase = 'owned-photo structured listing assistance';
+  const suggested = await api('/ai/listing-draft', 'POST', { sessionId: session.id, attachmentId: photo.id, hint: 'A synthetic red picture card offered for donation. Unknown condition and quantity.' });
+  assert(suggested.requiresUserReview && suggested.draft);
+  report('PASS real owned-photo listing suggestions requiring review');
 
   phase = 'session isolation and deletion';
   const separate = AskSessionSchema.parse(await api('/ask/sessions', 'POST', { clientId: randomUUID() }));

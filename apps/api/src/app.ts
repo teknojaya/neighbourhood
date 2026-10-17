@@ -3,8 +3,15 @@ import express, { type Express, Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import helmet from 'helmet';
 import { API_PREFIX, ApiRoutes } from '@neighbourhood/shared';
+import type { LoansService } from './modules/loans/loans.service.js';
+import type { CommunitiesService } from './modules/communities/communities.service.js';
+import type { MatchingService } from './modules/needs/matching.service.js';
+import { pushRouter } from './modules/notifications/push.routes.js';
+import type { Db } from './lib/db.js';
+import QRCode from 'qrcode';
+import { z } from 'zod';
 import type { AppConfig } from './config.js';
-import { errorHandler, HttpError, notFound } from './lib/http.js';
+import { errorHandler, HttpError, notFound, parseBody } from './lib/http.js';
 import { aiRouter } from './modules/ai/ai.routes.js';
 import type { AiService } from './modules/ai/ai.service.js';
 import type { AccessRepository } from './modules/auth/access.js';
@@ -26,6 +33,9 @@ import type { ConversationsService } from './modules/conversations/conversations
 import type { NotificationsService } from './modules/notifications/notifications.service.js';
 import { askRouter } from './modules/ask/ask.routes.js';
 import type { AskService } from './modules/ask/ask.service.js';
+import type { ListingsService } from './modules/listings/listings.service.js';
+import { storageReadRouter } from './modules/storage/storage.routes.js';
+import type { FirebaseObjectStorage } from './lib/storage.js';
 
 export interface AppDeps {
   config: AppConfig;
@@ -35,11 +45,18 @@ export interface AppDeps {
   otp: EmailOtpService;
   profiles: ProfilesService;
   ai: AiService;
+  matching?: MatchingService;
+  db?: Db;
+  demoSignIn?: (uid: 'demo-owner' | 'demo-neighbour' | 'demo-volunteer') => Promise<string>;
   requests: RequestsService;
   conversations: ConversationsService;
   notifications: NotificationsService;
   needs: NeedsService;
+  loans?: LoansService;
+  communities?: CommunitiesService;
   ask?: AskService;
+  listings?: ListingsService;
+  photoStorage?: FirebaseObjectStorage;
 }
 
 export function createApp(deps: AppDeps): Express {
@@ -107,19 +124,30 @@ export function createApp(deps: AppDeps): Express {
   api.use(express.json({ limit: '32kb' }));
   // Public sign-in support (auth methods, email OTP → Firebase custom token).
   api.use(authPublicRouter(deps.otp));
+  if (deps.config.firebase.useEmulators && deps.demoSignIn) api.post('/auth/demo', async (req, res) => { const body = parseBody(z.strictObject({ uid: z.enum(['demo-owner', 'demo-neighbour', 'demo-volunteer']) }), req); res.json({ customToken: await deps.demoSignIn!(body.uid) }); });
+  if (deps.communities) api.get('/points/qr-image/:qrId', async (req, res) => {
+    const qrId = z.string().regex(/^[A-Za-z0-9_-]{16,64}$/).parse(req.params.qrId);
+    await deps.communities!.qr(qrId);
+    res.type('image/png').send(await QRCode.toBuffer(qrId, { width: 240, margin: 4, errorCorrectionLevel: 'M' }));
+  });
+  // Local storage routes (unauthenticated to mirror S3/GCS signed URL behavior)
+  if (deps.photoStorage) {
+    api.use(storageReadRouter(deps.photoStorage));
+  }
   // Every other /api/v1 route requires a verified Firebase ID token mapped to a PostgreSQL user.
   api.use(requireAuth(deps.tokenVerifier, deps.users));
 
   api.use(profilesRouter(deps.profiles));
-  api.use(aiRouter(deps.ai));
+  api.use(aiRouter(deps.ai, { matching: deps.matching, photo: deps.ask ? (userId, sessionId, attachmentId) => deps.ask!.image(userId, sessionId, attachmentId) : undefined }));
   if (deps.ask) api.use(askRouter(deps.ask));
-  api.use(listingsRouter());
-  api.use(communitiesRouter());
+  api.use(listingsRouter(deps.listings));
+  api.use(communitiesRouter(deps.communities));
   api.use(requestsRouter(deps.requests));
-  api.use(loansRouter());
-  api.use(needsRouter(deps.needs));
+  api.use(loansRouter(deps.loans));
+  api.use(needsRouter(deps.needs, deps.matching));
   api.use(conversationsRouter(deps.conversations));
   api.use(notificationsRouter(deps.notifications));
+  if (deps.db) api.use(pushRouter(deps.db));
   api.use(notFound);
 
   app.use(API_PREFIX, api);

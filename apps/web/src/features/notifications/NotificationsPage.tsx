@@ -1,4 +1,5 @@
 import { ApiRoutes, NotificationPageSchema, NotificationSchema } from '@neighbourhood/shared';
+import { PushPreferences } from './PushPreferences';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { Alert, Button, Card } from '../../components/ui';
@@ -22,6 +23,7 @@ export function NotificationsPage() {
   const items = inbox.data?.pages.flatMap((p) => p.items) ?? [];
   return <div className="space-y-4">
     <h1 className="text-2xl font-bold">{t('module.notifications.title')}</h1>
+    <PushPreferences />
     <p className="text-sm text-stone-600">{t('module.notifications.body')}</p>
     {inbox.isPending && <p role="status">{t('common.loading')}</p>}
     {inbox.isError && <Alert tone="error">{featureError(inbox.error)} <Button variant="ghost" onClick={() => void inbox.refetch()}>{t('common.retry')}</Button></Alert>}

@@ -15,3 +15,4 @@ export * from './contracts/messaging.js';
 export * from './contracts/needs.js';
 export * from './contracts/ask.js';
 export * from './ai/contracts.js';
+export * from './contracts/marketplace-actions.js';

@@ -1,10 +1,14 @@
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getStorage } from 'firebase-admin/storage';
+import { getMessaging } from 'firebase-admin/messaging';
+import { FcmPushSender } from './modules/notifications/push.adapter.js';
+import { MaintenanceService } from './modules/notifications/maintenance.service.js';
 import { createApp } from './app.js';
 import { ConfigError, loadConfig } from './config.js';
 import { createDb } from './lib/db.js';
 import { logger } from './lib/logger.js';
+import { FirebaseObjectStorage } from './lib/storage.js';
 import { AiService } from './modules/ai/ai.service.js';
 import { GeminiAdapter } from './modules/ai/gemini.adapter.js';
 import { PrismaAccessRepository } from './modules/auth/access.js';
@@ -14,6 +18,10 @@ import { SmtpEmailSender } from './modules/email-otp/email.sender.js';
 import { FirebaseIdentityProvider } from './modules/email-otp/firebase-identity.js';
 import { PrismaOtpChallengeRepository } from './modules/email-otp/otp.repository.js';
 import { EmailOtpService } from './modules/email-otp/otp.service.js';
+import { LoansService } from './modules/loans/loans.service.js';
+import { CommunitiesService } from './modules/communities/communities.service.js';
+import { ListingsService } from './modules/listings/listings.service.js';
+import { MatchingService } from './modules/needs/matching.service.js';
 import { PrismaProfilesRepository } from './modules/profiles/profiles.repository.js';
 import { ProfilesService } from './modules/profiles/profiles.service.js';
 import { PrismaRequestsService } from './modules/requests/requests.service.js';
@@ -25,6 +33,17 @@ import { GeminiAskModel } from './modules/ask/ask.model.js';
 import { FirebaseAskImageStorage } from './modules/ask/ask.images.js';
 
 function main() {
+  // Safe environment loading for local development
+  try {
+    process.loadEnvFile('.env');
+  } catch {
+    try {
+      process.loadEnvFile('../../.env');
+    } catch {
+      // In CI or deployed Cloud Run, variables come from process.env
+    }
+  }
+
   let config;
   try {
     config = loadConfig();
@@ -59,23 +78,37 @@ function main() {
     Boolean(config.firebase.projectId),
   );
 
-  const services = { needs: new PrismaNeedsService(db), requests: new PrismaRequestsService(db), conversations: new PrismaConversationsService(db), notifications: new PrismaNotificationsService(db) };
+  const photoStorage = config.firebase.storageBucket ? new FirebaseObjectStorage(getStorage(firebaseApp), config.firebase.storageBucket,
+    process.env.STORAGE_SIGNING_SECRET ? Buffer.from(process.env.STORAGE_SIGNING_SECRET) : undefined) : undefined;
+  const listings = new ListingsService(db, photoStorage);
+  const matching = new MatchingService(db, listings, generator);
+
+  const services = { loans: new LoansService(db), communities: new CommunitiesService(db), needs: new PrismaNeedsService(db), requests: new PrismaRequestsService(db), conversations: new PrismaConversationsService(db), notifications: new PrismaNotificationsService(db) };
+  const askServices = { ...services, marketplace: { listings, loans: services.loans, communities: services.communities, matching }, listings: { get: async (userId: string, id: string) => (await listings.getListingDetail(userId, id)).listing } };
   const ask = new PrismaAskService(db, config.gemini ? new GeminiAskModel(config.gemini.model, config.gemini.apiKey) : null,
-    config.firebase.storageBucket ? new FirebaseAskImageStorage(getStorage(firebaseApp), config.firebase.storageBucket) : null, services);
+    config.firebase.storageBucket ? new FirebaseAskImageStorage(getStorage(firebaseApp), config.firebase.storageBucket) : null, askServices);
   // Storage cleanup is retryable; soft-deleted chats are never readable meanwhile.
   void ask.purgeDeletedSessions().catch(() => logger.warn('ask_cleanup_unavailable'));
   const cleanup = setInterval(() => { void ask.purgeDeletedSessions().catch(() => logger.warn('ask_cleanup_unavailable')); }, 15 * 60_000);
   cleanup.unref();
+  const maintenance = new MaintenanceService(db, process.env.PUSH_ENABLED === 'true' && !config.firebase.useEmulators ? new FcmPushSender(getMessaging(firebaseApp)) : null);
+  const jobs = setInterval(() => { void maintenance.run().catch(() => logger.warn('maintenance_retry_needed')); }, 60_000);
+  jobs.unref();
   const app = createApp({
     config,
+    db,
+    demoSignIn: config.firebase.useEmulators ? async uid => { await firebaseAuth.getUser(uid); return firebaseAuth.createCustomToken(uid); } : undefined,
     tokenVerifier: new FirebaseTokenVerifier(firebaseAuth),
     users: new UserProvisioningService(new PrismaUsersRepository(db)),
     access,
     otp,
     profiles: new ProfilesService(new PrismaProfilesRepository(db), access),
-    ai: new AiService(generator),
+    ai: new AiService(generator, undefined, config.gemini ? new GeminiAskModel(config.gemini.model, config.gemini.apiKey) : null),
     ...services,
     ask,
+    listings,
+    matching,
+    photoStorage,
   });
 
   const server = app.listen(config.port, () => {
@@ -95,6 +128,7 @@ function main() {
   const shutdown = (signal: string) => {
     logger.info('server_stopping', { signal });
     clearInterval(cleanup);
+    clearInterval(jobs);
     server.close(() => {
       void db.$disconnect().finally(() => process.exit(0));
     });

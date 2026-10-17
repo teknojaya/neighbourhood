@@ -8,3 +8,8 @@
 *.log
 service-account*.json
 .git
+**/uploads
+**/coverage
+**/playwright-report
+**/test-results
+**/.agents

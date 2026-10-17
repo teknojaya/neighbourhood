@@ -2,10 +2,10 @@
   "name": "neighbourhood",
   "private": true,
   "version": "0.1.0",
-  "description": "NeighbourHood \u2014 neighbours donating and lending useful items.",
+  "description": "NeighbourHood — neighbours donating and lending useful items.",
   "type": "module",
   "engines": {
-    "node": ">=22.22.0"
+    "node": ">=24.12.0"
   },
   "workspaces": [
     "packages/shared",
@@ -13,6 +13,7 @@
     "apps/web"
   ],
   "scripts": {
+    "smoke:marketplace": "node --env-file-if-exists=apps/api/.env --import tsx scripts/smoke-marketplace.mjs",
     "build:shared": "npm run build -w @neighbourhood/shared",
     "dev": "npm run build:shared && concurrently -k -n shared,api,web -c gray,blue,green \"npm run dev -w @neighbourhood/shared\" \"npm run dev -w @neighbourhood/api\" \"npm run dev -w @neighbourhood/web\"",
     "emulators": "firebase emulators:start --only auth,storage --project demo-neighbourhood",
@@ -34,8 +35,12 @@
     "eslint-plugin-react-hooks": "7.1.1",
     "firebase-tools": "15.34.0",
     "globals": "17.13.0",
+    "playwright": "1.64.1",
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.2",
     "vitest": "5.0.5"
+  },
+  "overrides": {
+    "@grpc/grpc-js": "1.14.6"
   }
 }

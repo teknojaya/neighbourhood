@@ -1,4 +1,5 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { NeedMatches } from './NeedMatches';
 import { Link } from 'react-router';
 import { z } from 'zod';
 import { ApiRoutes, SavedNeedPageSchema } from '@neighbourhood/shared';
@@ -38,6 +39,7 @@ export function SavedNeedsPage() {
       </div>)}
       {need.extraction.timing.neededBy && <p className="text-sm">{t('needs.neededBy', { date: need.extraction.timing.neededBy })}</p>}
       {need.extraction.timing.loanDurationDays && <p className="text-sm">{t('needs.duration', { days: need.extraction.timing.loanDurationDays })}</p>}
+      <NeedMatches id={need.id} />
       <Button type="button" variant="secondary" disabled={!online || remove.isPending} onClick={() => { if (window.confirm(t('needs.deleteConfirm'))) remove.mutate(need.id); }}>{t('needs.delete')}</Button>
     </Card>)}
     {saved.hasNextPage && <Button type="button" disabled={saved.isFetchingNextPage} onClick={() => void saved.fetchNextPage()}>{t('common.loadMore')}</Button>}

@@ -56,7 +56,7 @@ export function AskPage() {
       : <Card className="space-y-4">
         <p>{t('ask.intro')}</p>
         <p className="text-sm text-stone-600">{t('ask.capabilities')}</p>
-        <div className="flex flex-wrap gap-2">{(['donate', 'remember', 'requests'] as const).map((kind) => <Button type="button" variant="secondary" key={kind} disabled={create.isPending || !online} onClick={() => { setPrompt(t(`ask.prompt.${kind}`)); create.mutate(); }}>{t(`ask.starter.${kind}`)}</Button>)}</div>
+        <div className="flex flex-wrap gap-2">{(['find', 'donate', 'borrow', 'remember', 'requests', 'community'] as const).map((kind) => <Button type="button" variant="secondary" key={kind} disabled={create.isPending || !online} onClick={() => { setPrompt(t(`ask.prompt.${kind}`)); create.mutate(); }}>{t(`ask.starter.${kind}`)}</Button>)}</div>
       </Card>}
   </div>;
 }
@@ -68,6 +68,8 @@ function AskChat({ sessionId, available, imagesAvailable, initialPrompt, onDelet
   const retry = useRef<{ signature: string; body: AskSendBody } | null>(null);
   const [older, setOlder] = useState<{ items: AskMessage[]; before: number | null } | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const historyRef = useRef<HTMLDivElement>(null);
+  const firstHistory = useRef(false);
   const photoRetry = useRef(createRetryKey());
   const send = useMutation({
     mutationFn: (body: AskSendBody) => api(`${ApiRoutes.ask}/sessions/${sessionId}/messages`, { method: 'POST', body, schema: AskRunSchema }),
@@ -111,6 +113,12 @@ function AskChat({ sessionId, available, imagesAvailable, initialPrompt, onDelet
   const photos = detail.data?.pendingAttachments ?? [];
   const failedRun = detail.data?.latestRun?.status === 'failed' ? detail.data.latestRun : null;
   const messages = [...new Map([...(older?.items ?? []), ...(detail.data?.messages.items ?? [])].map((m) => [m.id, m])).values()].sort((a, b) => a.sequence - b.sequence);
+  useEffect(() => {
+    const box = historyRef.current;
+    if (!box || !detail.data) return;
+    if (!firstHistory.current || box.scrollHeight - box.scrollTop - box.clientHeight < 160) box.scrollTop = box.scrollHeight;
+    firstHistory.current = true;
+  }, [messages.length, detail.data?.latestRun?.partialText, detail.data]);
   const completedClientId = detail.data?.latestRun?.status === 'completed' ? detail.data.latestRun.clientMessageId : null;
   const resetSend = send.reset;
   useEffect(() => {
@@ -136,7 +144,7 @@ function AskChat({ sessionId, available, imagesAvailable, initialPrompt, onDelet
     send.mutate({ clientMessageId: failedRun.clientMessageId, text: message.text, attachmentIds: message.attachments.map((a) => a.id) });
   }
 
-  return <div className="flex min-h-[calc(100dvh-17rem)] flex-col gap-4">
+  return <div className="flex h-[calc(100dvh-16rem)] min-h-72 flex-col gap-3">
     <div className="flex items-center justify-between gap-2">
       <h2 className="min-w-0 break-words font-semibold">{detail.data?.session.title ?? t('ask.newChat')}</h2>
       <Button type="button" variant="ghost" disabled={isRunning || removeChat.isPending || !online} onClick={() => { if (window.confirm(t('ask.deleteConfirm'))) removeChat.mutate(); }}>{t('ask.delete')}</Button>
@@ -144,7 +152,7 @@ function AskChat({ sessionId, available, imagesAvailable, initialPrompt, onDelet
     {detail.isPending && <Alert>{t('common.loading')}</Alert>}
     {detail.isError && <Alert tone="error">{featureError(detail.error)}</Alert>}
     {removeChat.isError && <Alert tone="error">{featureError(removeChat.error)}</Alert>}
-    <div className="flex-1 space-y-4" aria-label={t('ask.history')}>
+    <div ref={historyRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1" aria-label={t('ask.history')}>
       {(older ? older.before !== null : detail.data?.messages.beforeSequence != null) && <Button type="button" variant="secondary" disabled={loadOlder.isPending} onClick={() => loadOlder.mutate()}>{t('ask.older')}</Button>}
       {loadOlder.isError && <Alert tone="error">{featureError(loadOlder.error)}</Alert>}
       {messages.length === 0 && <p className="text-sm text-stone-600">{t('ask.capabilities')}</p>}
@@ -154,18 +162,19 @@ function AskChat({ sessionId, available, imagesAvailable, initialPrompt, onDelet
         {message.text && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.text}</p>}
         {message.parts.map((part, index) => <AskCard key={index} part={part} sessionId={sessionId} onEditDraft={() => { setText(t('ask.editDraftPrompt')); inputRef.current?.focus(); }} />)}
       </article>)}
-      {isRunning && <Alert>{t('ask.thinking')}</Alert>}
+      {isRunning && <Alert><p role="status">{({ thinking: 'Thinking…', searching: 'Looking nearby…', reading: 'Checking your activity…', preparing: 'Preparing a review card…', answering: 'Writing a reply…' } as const)[detail.data?.latestRun?.progress ?? 'thinking']}</p>{detail.data?.latestRun?.partialText && <p className="mt-2 whitespace-pre-wrap break-words text-sm">{detail.data.latestRun.partialText}</p>}</Alert>}
       {failedRun && <Alert tone="error"><p>{featureError(new ApiError(failedRun.errorCode ?? 'INTERNAL', '', 0))}</p><Button type="button" variant="secondary" disabled={isRunning || !online || !available} onClick={retryTurn}>{t('common.retry')}</Button></Alert>}
       {send.isError && <Alert tone="error">{featureError(send.error)}</Alert>}
       {stop.isError && <Alert tone="error">{featureError(stop.error)}</Alert>}
     </div>
-    <form onSubmit={submit} className="sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] space-y-2 rounded-2xl bg-stone-50/95 p-3 shadow-sm ring-1 ring-stone-200 backdrop-blur">
+    <form onSubmit={submit} className="shrink-0 space-y-2 rounded-2xl bg-stone-50/95 p-3 shadow-sm ring-1 ring-stone-200 backdrop-blur">
       {photos.length > 0 && <div className="flex flex-wrap gap-2">{photos.map((attachment) => <div key={attachment.id} className="space-y-1"><PrivatePhoto sessionId={sessionId} attachment={attachment} /><Button type="button" variant="ghost" disabled={isRunning || removePhoto.isPending || !online} onClick={() => removePhoto.mutate(attachment.id)}>{t('ask.removePhoto')}</Button></div>)}</div>}
       {upload.isError && <Alert tone="error">{featureError(upload.error)}</Alert>}
       {removePhoto.isError && <Alert tone="error">{featureError(removePhoto.error)}</Alert>}
       <label className="sr-only" htmlFor="ask-message">{t('ask.message')}</label>
       <textarea ref={inputRef} id="ask-message" value={text} onChange={(event) => setText(event.target.value)} maxLength={ASK_LIMITS.textChars} rows={2} placeholder={t('ask.placeholder')} disabled={isRunning} className="block w-full resize-none rounded-xl border border-stone-300 bg-white p-3 text-base disabled:bg-stone-100" />
       <div className="flex flex-wrap items-center justify-between gap-2">
+        {imagesAvailable && <label className="inline-flex min-h-11 cursor-pointer items-center px-2 text-sm font-semibold text-brand-800">Camera<input aria-label="Take photo" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="sr-only" disabled={!online || isRunning || upload.isPending || photos.length >= ASK_LIMITS.attachmentsPerMessage} onChange={event => { const file = event.target.files?.[0]; if (file) upload.mutate(file); event.target.value = ''; }} /></label>}
         {imagesAvailable && <label className="cursor-pointer rounded-xl px-2 py-2 text-sm font-semibold text-brand-800">{upload.isPending ? t('ask.uploading') : t('ask.attach')}
           <input aria-label={t('ask.attach')} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={!online || isRunning || upload.isPending || photos.length >= ASK_LIMITS.attachmentsPerMessage} onChange={(event) => { const file = event.target.files?.[0]; if (file) upload.mutate(file); event.target.value = ''; }} />
         </label>}

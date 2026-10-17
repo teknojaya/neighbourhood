@@ -8,12 +8,14 @@ import { authUser } from '../auth/auth.js';
 import { aiRateLimiter } from '../ai/ai.routes.js';
 import { idempotencyKey } from '../requests/idempotency.js';
 import type { AskService } from './ask.service.js';
+import { MarketplaceActionSchema } from '@neighbourhood/shared';
 
 export function askRouter(service: AskService): Router {
   const r = Router();
   const limiter = aiRateLimiter();
   const uploadLimit = rateLimit({ windowMs: 10 * 60_000, limit: 20, keyGenerator: (req) => authUser(req).userId,
     handler: (_req, _res, next) => next(new HttpError('RATE_LIMITED', 'Too many photos; try again later')) });
+  r.post('/ask/sessions/:sessionId/proposals', async (req, res) => { const body = parseBody(z.strictObject({ clientId: z.uuid(), action: MarketplaceActionSchema }), req); res.status(201).json(await service.prepareFromUi(authUser(req).userId, uuidParam(req, 'sessionId'), body.clientId, body.action)); });
   r.get('/ask/status', (_req, res) => { res.json(service.status()); });
   r.get('/ask/sessions', async (req, res) => { res.json(await service.list(authUser(req).userId, parseQuery(PageQuerySchema, req))); });
   r.post('/ask/sessions', async (req, res) => {

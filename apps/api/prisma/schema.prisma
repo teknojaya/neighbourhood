@@ -247,6 +247,7 @@ model CommunityPoint {
 }
 
 model PointInventoryItem {
+  listing Listing?
   id         String       @id @default(uuid()) @db.Uuid
   pointId    String       @map("point_id") @db.Uuid
   category   ItemCategory
@@ -304,6 +305,8 @@ model StockAdjustment {
 
 // ------------------------------------------------------------- listings
 model Listing {
+  pointInventoryItemId String? @unique @map("point_inventory_item_id") @db.Uuid
+  pointInventoryItem PointInventoryItem? @relation(fields: [pointInventoryItemId], references: [id], onDelete: SetNull)
   id               String           @id @default(uuid()) @db.Uuid
   ownerId          String           @map("owner_id") @db.Uuid
   status           ListingStatus    @default(draft)
@@ -457,6 +460,10 @@ model Message {
 
 // -------------------------------------------------------- notifications
 model Notification {
+  pushSentAt DateTime? @map("push_sent_at") @db.Timestamptz(3)
+  pushStartedAt DateTime? @map("push_started_at") @db.Timestamptz(3)
+  pushAttempts Int @default(0) @map("push_attempts")
+  nextPushAt DateTime @default(now()) @map("next_push_at") @db.Timestamptz(3)
   id        String    @id @default(uuid()) @db.Uuid
   userId    String    @map("user_id") @db.Uuid
   type      String    @db.VarChar(40)
@@ -550,6 +557,8 @@ model AskMessage {
 }
 
 model AskRun {
+  progress String @default("thinking") @db.VarChar(30)
+  partialText String @default("") @map("partial_text") @db.Text
   id              String @id @default(uuid()) @db.Uuid
   sessionId       String @map("session_id") @db.Uuid
   clientMessageId String @map("client_message_id") @db.Uuid
@@ -582,6 +591,7 @@ model AskAttachment {
 }
 
 model AskAction {
+  firstStartedAt DateTime? @map("first_started_at") @db.Timestamptz(3)
   id          String @id @default(uuid()) @db.Uuid
   sessionId   String @map("session_id") @db.Uuid
   runId       String @map("run_id") @db.Uuid

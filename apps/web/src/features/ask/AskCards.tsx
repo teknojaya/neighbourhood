@@ -1,3 +1,6 @@
+import { PublishDraft } from './PublishDraft';
+import { PointDraft } from './PointDraft';
+import { MarketplacePreview } from './MarketplacePreview';
 import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
@@ -7,6 +10,17 @@ import { t } from '../../i18n';
 import { api, privateImage, ApiError } from '../../lib/api';
 import { featureError } from '../activity/feature-errors';
 import { useOnline } from '../../lib/useOnline';
+
+const marketplaceTitles = {
+  listing_publish: 'Publish this item', listing_edit: 'Update this item',
+  listing_transition: 'Change listing availability', photo_delete: 'Remove this photo',
+  loan_request: 'Request a loan', loan_transition: 'Update this loan',
+  community_join: 'Join this community', community_create: 'Create a community',
+  point_create: 'Add a collection point', member_update: 'Update community membership',
+  deposit_propose: 'Offer a deposit', deposit_review: 'Review this deposit',
+  stock_adjust: 'Record an inventory change', need_delete: 'Remove this saved need',
+  notification_read: 'Mark this notification as read', profile_preferences: 'Update your preferences',
+};
 
 export function PrivatePhoto({ sessionId, attachment }: { sessionId: string; attachment: AskAttachment }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -26,6 +40,15 @@ export function PrivatePhoto({ sessionId, attachment }: { sessionId: string; att
 
 export function AskCard({ part, sessionId, onEditDraft }: { part: AskPart; sessionId: string; onEditDraft(): void }) {
   switch (part.kind) {
+    case 'matches': return <Card className="space-y-3"><h3 className="font-semibold">Matches for your saved need</h3>{part.items.length === 0 && <p>No matches nearby yet.</p>}{part.items.map(item => <Link className="block border-t py-3" key={item.listing.id} to={'/listings/' + item.listing.id}><strong>{item.listing.title}</strong><p className="text-sm">{item.reason}</p>{item.missingInfo.map((info,i) => <p className="text-xs text-stone-600" key={i}>{info}</p>)}</Link>)}</Card>;
+    case 'listings': return <Card className="space-y-3"><h3 className="font-semibold">Nearby items</h3>{part.items.length === 0 && <p>No matching items found. Try a wider radius or a shorter item name.</p>}{part.items.map(item => <Link key={item.id} to={'/listings/' + item.id} className="flex min-h-16 gap-3 border-b py-3">{item.photos[0]?.url && <img className="h-16 w-16 rounded-xl object-cover" src={item.photos[0].url} alt="" />}<div className="min-w-0"><strong className="break-words">{item.title}</strong><p className="text-sm">{item.mode} · {item.stock.total - item.stock.reserved - item.stock.collected} available</p><p className="text-xs">{item.location.areaLabel}{item.location.distanceKm !== undefined ? ' · ' + item.location.distanceKm + ' km' : ''}</p></div></Link>)}</Card>;
+    case 'loans': return <Card>{part.items.length === 0 && <p>No loans yet.</p>}{part.items.map(item => <Link className="block py-3" key={item.id} to={'/activity?loan=' + item.id}>{item.listingTitle} · {item.status}<p className="text-sm">{item.startDate} → {item.endDate}{item.overdue ? ' · Overdue' : ''}</p></Link>)}</Card>;
+    case 'communities': return <Card>{part.items.map(item => <div key={item.id}><Link className="block py-3" to={'/communities?community=' + item.id}><strong>{item.name}</strong><p>{item.areaLabel} · {item.memberCount} members</p></Link><PointDraft communityId={item.id} sessionId={sessionId} /></div>)}</Card>;
+    case 'points': return <Card>{part.items.map(item => <Link className="block py-3" key={item.id} to={'/communities?point=' + item.id}><strong>{item.name}</strong><p>{item.publicAddress ?? item.location.areaLabel}</p></Link>)}</Card>;
+    case 'inventory': return <Card>{part.items.map(item => <p className="py-2" key={item.id}>{item.title} · {item.available} available{item.bestBefore ? ' · best before ' + item.bestBefore : ''}</p>)}</Card>;
+    case 'deposits': return <Card>{part.items.map(item => <p className="py-2" key={item.id}>{item.items.map(i => i.title + ' × ' + i.quantity).join(', ')} · {item.status}</p>)}</Card>;
+    case 'members': return <Card>{part.items.map(item => <p className="break-words py-2" key={item.userId}>{item.displayName ?? 'Neighbour'} · {item.role} · {item.status}</p>)}</Card>;
+    case 'stock_audit': return <Card>{part.items.map(item => <p className="py-2" key={item.id}>{item.delta} · {item.reason} · {item.note}</p>)}</Card>;
     case 'action': return <ActionCard key={`${part.action.id}:${part.action.revision}:${part.action.status}`} action={part.action} sessionId={sessionId} />;
     case 'listing_draft': return <Card className="space-y-2">
       <h3 className="font-semibold">{t('ask.listingDraft')}</h3>
@@ -33,7 +56,7 @@ export function AskCard({ part, sessionId, onEditDraft }: { part: AskPart; sessi
       <p className="text-sm text-stone-600">{part.draft.data.category ? t(`category.${part.draft.data.category}`) : t('ask.unknown')} · {part.draft.data.mode ?? t('ask.unknown')}</p>
       <p className="text-sm">{part.draft.data.description}</p>
       <p className="text-sm">{t('ask.draftFacts', { quantity: part.draft.data.quantity ?? t('ask.unknown'), condition: part.draft.data.condition?.replaceAll('_', ' ') ?? t('ask.unknown') })}</p>
-      <Alert>{t('ask.draftPrivate')}</Alert>
+      <PublishDraft draft={part.draft} sessionId={sessionId} />
       <Button type="button" variant="secondary" onClick={onEditDraft}>{t('ask.editInChat')}</Button>
     </Card>;
     case 'saved_needs': return <Card className="space-y-2"><h3 className="font-semibold">{t('needs.savedTitle')}</h3>
@@ -78,13 +101,17 @@ function ActionCard({ action, sessionId }: { action: AskAction; sessionId: strin
       void queryClient.invalidateQueries({ queryKey: ['saved-needs'] });
       void queryClient.invalidateQueries({ queryKey: ['requests'] });
       void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      void queryClient.invalidateQueries({ queryKey: ['loans'] });
+      void queryClient.invalidateQueries({ queryKey: ['my-listings'] });
     },
   });
-  const isHandover = action.payload.kind === 'transition_request' && action.payload.body.to === 'collected';
+  const isMarketplaceHandover = action.payload.kind === 'marketplace' && ((action.payload.action.operation === 'loan_transition' && ['checked_out', 'returned'].includes(action.payload.action.body.to)) || action.payload.action.operation === 'deposit_review' || action.payload.action.operation === 'stock_adjust');
+  const isHandover = isMarketplaceHandover || action.payload.kind === 'transition_request' && action.payload.body.to === 'collected';
   const pending = action.status === 'pending';
   return <Card className="space-y-3 border-l-4 border-brand-700">
-    <h3 className="font-semibold">{t(`ask.action.${action.payload.kind}`)}</h3>
+    <h3 className="font-semibold">{action.payload.kind === 'marketplace' ? marketplaceTitles[action.payload.action.operation] : t(`ask.action.${action.payload.kind}`)}</h3>
     <p className="break-words text-sm">{action.summary}</p>
+    {action.payload.kind === 'marketplace' && <MarketplacePreview action={action.payload.action} />}
     {action.payload.kind === 'send_message' && <><blockquote className="whitespace-pre-wrap break-words rounded-xl bg-stone-50 p-3 text-sm">{action.payload.body}</blockquote><Link className="text-sm text-brand-800 underline" to={`/messages?conversation=${action.payload.conversationId}`}>{t('ask.openConversation')}</Link></>}
     {action.payload.kind === 'request_item' && <><p>{t('needs.quantity', { value: action.payload.body.quantity })}</p>{action.payload.body.message && <blockquote className="whitespace-pre-wrap break-words text-sm">{action.payload.body.message}</blockquote>}</>}
     {action.payload.kind === 'transition_request' && <div className="space-y-2 text-sm">
@@ -118,7 +145,7 @@ function ActionCard({ action, sessionId }: { action: AskAction; sessionId: strin
     {action.receipt && <Alert tone="success">{action.receipt.message}{action.receipt.link && <Link className="ml-2 underline" to={action.receipt.link}>{t('notifications.open')}</Link>}</Alert>}
     {pending && <>
       <p className="text-xs text-stone-500">{t('ask.reviewHint')}</p>
-      {isHandover && <label className="flex gap-2 text-sm"><input type="checkbox" checked={handedOver} onChange={(event) => setHandedOver(event.target.checked)} />{t('ask.handoverCheck')}</label>}
+      {isHandover && <label className="flex gap-2 text-sm"><input type="checkbox" checked={handedOver} onChange={(event) => setHandedOver(event.target.checked)} />{isMarketplaceHandover ? 'I checked this handover or inventory change in person.' : t('ask.handoverCheck')}</label>}
       <div className="flex flex-wrap gap-2">
         <Button type="button" disabled={mutation.isPending || !online || edit || (isHandover && !handedOver)} onClick={() => mutation.mutate({ operation: 'confirm' })}>{t('common.confirm')}</Button>
         {extraction && <Button type="button" variant="secondary" disabled={mutation.isPending || !online} onClick={() => setEdit(!edit)}>{edit ? t('common.back') : t('ask.edit')}</Button>}

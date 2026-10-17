@@ -1,3 +1,5 @@
+import { MyListingsPanel } from '../listings/MyListingsPanel';
+import { LoansPanel } from '../loans/LoansPanel';
 import { type DonationRequest } from '@neighbourhood/shared';
 import { useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
@@ -18,6 +20,8 @@ export function ActivityPage() {
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">{t('activity.title')}</h1>
       <p className="text-sm text-stone-600">{t('activity.intro')}</p>
+      <MyListingsPanel />
+      <LoansPanel />
       <div className="flex flex-wrap gap-3 text-sm font-semibold text-brand-800">
         <Link to="/messages" className="min-h-11 py-3 underline">{t('module.messages.title')}</Link>
         <Link to="/notifications" className="min-h-11 py-3 underline">{t('module.notifications.title')}</Link>

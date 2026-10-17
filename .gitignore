@@ -33,3 +33,7 @@ storage-debug.log
 
 # Prisma CLI agent-skill docs (vendor-generated)
 apps/api/.agents/
+
+# Local file storage uploads
+uploads/
+apps/api/uploads/

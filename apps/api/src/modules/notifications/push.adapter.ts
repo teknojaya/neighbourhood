@@ -16,7 +16,6 @@ export interface PushSender {
 const INVALID_TOKEN_CODES = new Set([
   'messaging/registration-token-not-registered',
   'messaging/invalid-registration-token',
-  'messaging/invalid-argument',
 ]);
 
 /** Firebase Cloud Messaging (web push) via the Admin SDK. */
@@ -25,12 +24,10 @@ export class FcmPushSender implements PushSender {
 
   async send(tokens: string[], msg: PushMessage) {
     if (tokens.length === 0) return { successCount: 0, invalidTokens: [] };
-    if (!msg.link.startsWith('/')) throw new Error('Push links must be in-app paths');
+    if (!msg.link.startsWith('/') || msg.link.startsWith('//')) throw new Error('Push links must be in-app paths');
     const res = await this.messaging.sendEachForMulticast({
       tokens: tokens.slice(0, 500),
-      notification: { title: msg.title, body: msg.body },
-      data: { link: msg.link },
-      webpush: { fcmOptions: { link: msg.link } },
+      data: { title: msg.title, body: msg.body, link: msg.link },
     });
     const invalidTokens = res.responses.flatMap((r, i) =>
       !r.success && r.error && INVALID_TOKEN_CODES.has(r.error.code) ? [tokens[i]!] : [],

@@ -20,6 +20,7 @@ const EnvSchema = z.object({
 
   FIREBASE_PROJECT_ID: optionalString,
   FIREBASE_STORAGE_BUCKET: optionalString,
+  STORAGE_SIGNING_SECRET: optionalString,
 
   /** Must be exactly "true" to allow any *_EMULATOR_HOST variable. */
   USE_FIREBASE_EMULATORS: z.enum(['true', 'false']).default('false'),
@@ -119,6 +120,7 @@ export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
   if (e.NODE_ENV === 'production' && !e.FIREBASE_PROJECT_ID) {
     throw new ConfigError('FIREBASE_PROJECT_ID is required in production');
   }
+  if ((e.NODE_ENV === 'production' || deployed) && e.FIREBASE_STORAGE_BUCKET && (!e.STORAGE_SIGNING_SECRET || e.STORAGE_SIGNING_SECRET.length < 32)) throw new ConfigError('STORAGE_SIGNING_SECRET must contain at least 32 characters for deployed photo links');
   if (e.NODE_ENV !== 'test' && !e.DATABASE_URL) {
     throw new ConfigError('DATABASE_URL is required (see apps/api/.env.example)');
   }

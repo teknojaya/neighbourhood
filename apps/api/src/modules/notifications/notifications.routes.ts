@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { PageQuerySchema } from '@neighbourhood/shared';
-import { notImplemented, parseQuery } from '../../lib/http.js';
+import { parseQuery } from '../../lib/http.js';
 import { uuidParam } from '../../lib/route-input.js';
 import { authUser } from '../auth/auth.js';
 import type { NotificationsService } from './notifications.service.js';
@@ -17,7 +17,5 @@ export function notificationsRouter(service: NotificationsService): Router {
   r.post('/notifications/:notificationId/read', async (req, res) => {
     res.json(await service.markRead(authUser(req).userId, uuidParam(req, 'notificationId')));
   });
-  r.post('/notifications/push-tokens', notImplemented('Register push token'));
-  r.delete('/notifications/push-tokens/:tokenId', notImplemented('Remove push token'));
   return r;
 }

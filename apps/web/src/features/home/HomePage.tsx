@@ -30,10 +30,32 @@ export function HomePage() {
         </Alert>
       )}
 
-      <Link to="/needs" className="block rounded-2xl bg-brand-700 p-5 text-white shadow-sm hover:bg-brand-800">
-        <p className="text-lg font-semibold">{t('home.askCta')}</p>
-        <p className="mt-1 text-sm text-brand-50">{t('home.askBody')}</p>
-      </Link>
+      {/* Dual primary action cards: Receive (Ask AI) & Give (Share/Lend) */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Link
+          to="/needs"
+          className="group block rounded-2xl bg-brand-700 p-5 text-white shadow-sm transition hover:bg-brand-800"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold tracking-wide uppercase text-brand-200">Need something</span>
+            <span className="text-lg">✨</span>
+          </div>
+          <p className="mt-2 text-lg font-semibold">{t('home.askCta')}</p>
+          <p className="mt-1 text-sm text-brand-50">{t('home.askBody')}</p>
+        </Link>
+
+        <Link
+          to="/activity?tab=giving"
+          className="group block rounded-2xl border border-stone-200 bg-white p-5 shadow-sm transition hover:border-brand-600 hover:bg-brand-50/30"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold tracking-wide uppercase text-brand-700">Give or lend</span>
+            <span className="text-lg">🎁</span>
+          </div>
+          <p className="mt-2 text-lg font-semibold text-stone-900 group-hover:text-brand-800">{t('home.shareCta')}</p>
+          <p className="mt-1 text-sm text-stone-600">{t('home.shareBody')}</p>
+        </Link>
+      </div>
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-500">{t('home.modules')}</h2>
@@ -46,7 +68,7 @@ export function HomePage() {
                   <p className="text-sm text-stone-600">{t(m.body)}</p>
                 </div>
                 <span className="shrink-0 rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-semibold text-stone-600">
-                  {t('common.comingSoon')}
+                  Open
                 </span>
               </Card>
             </Link>

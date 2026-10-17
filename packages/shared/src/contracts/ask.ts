@@ -5,6 +5,11 @@ import { DonationRequestSchema, CreateDonationRequestBodySchema, DonationRequest
 import { ConversationSchema, MessageSchema, NotificationSchema } from './messaging.js';
 import { SavedNeedSchema } from './needs.js';
 import { ItemCategorySchema, ItemConditionSchema, ListingModeSchema } from '../enums.js';
+import { MarketplaceActionSchema } from './marketplace-actions.js';
+import { ListingPublicSchema } from './listings.js';
+import { LoanSchema } from './requests-loans.js';
+import { CommunitySchema, CommunityPointSchema, PointInventoryItemSchema, DepositSchema, MembershipSchema, StockAdjustmentSchema } from './communities.js';
+import { NeedMatchesSchema } from './needs.js';
 
 export const ASK_LIMITS = { textChars: 2000, attachmentsPerMessage: 2, historyMessages: 30, modelRounds: 4, toolCalls: 6, turnMs: 45_000, proposalMs: 10 * 60_000 } as const;
 export const AskSessionSchema = z.object({ id: IdSchema, title: z.string().max(80), createdAt: IsoDateTimeSchema, updatedAt: IsoDateTimeSchema });
@@ -19,6 +24,7 @@ export const AskSendBodySchema = z.strictObject({
 }).refine((v) => v.text.length > 0 || v.attachmentIds.length > 0, { message: 'Add a message or photo' });
 export type AskSendBody = z.infer<typeof AskSendBodySchema>;
 export const AskActionPayloadSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('marketplace'), action: MarketplaceActionSchema }),
   z.strictObject({ kind: z.literal('save_need'), extraction: NeedsExtractionSchema }),
   z.strictObject({ kind: z.literal('request_item'), body: CreateDonationRequestBodySchema }),
   z.strictObject({ kind: z.literal('transition_request'), requestId: z.uuid(), body: DonationRequestTransitionBodySchema }),
@@ -42,6 +48,15 @@ export const AskListingDraftDataSchema = z.strictObject({
 export const AskListingDraftSchema = z.object({ id: IdSchema, data: AskListingDraftDataSchema, updatedAt: IsoDateTimeSchema });
 export type AskListingDraft = z.infer<typeof AskListingDraftSchema>;
 export const AskPartSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('matches'), items: NeedMatchesSchema.shape.items }),
+  z.object({ kind: z.literal('listings'), items: z.array(ListingPublicSchema) }),
+  z.object({ kind: z.literal('loans'), items: z.array(LoanSchema) }),
+  z.object({ kind: z.literal('communities'), items: z.array(CommunitySchema) }),
+  z.object({ kind: z.literal('points'), items: z.array(CommunityPointSchema) }),
+  z.object({ kind: z.literal('inventory'), items: z.array(PointInventoryItemSchema) }),
+  z.object({ kind: z.literal('deposits'), items: z.array(DepositSchema) }),
+  z.object({ kind: z.literal('members'), items: z.array(MembershipSchema) }),
+  z.object({ kind: z.literal('stock_audit'), items: z.array(StockAdjustmentSchema) }),
   z.object({ kind: z.literal('action'), action: AskActionSchema }),
   z.object({ kind: z.literal('listing_draft'), draft: AskListingDraftSchema }),
   z.object({ kind: z.literal('saved_needs'), items: z.array(SavedNeedSchema) }),
@@ -54,7 +69,7 @@ export type AskPart = z.infer<typeof AskPartSchema>;
 export const AskMessageSchema = z.object({ id: IdSchema, sequence: z.number().int(), role: z.enum(['user', 'assistant']), text: z.string(), parts: z.array(AskPartSchema), attachments: z.array(AskAttachmentSchema), createdAt: IsoDateTimeSchema });
 export type AskMessage = z.infer<typeof AskMessageSchema>;
 export const AskMessagePageSchema = z.object({ items: z.array(AskMessageSchema), beforeSequence: z.number().int().nullable() });
-export const AskRunSchema = z.object({ id: IdSchema, clientMessageId: z.uuid(), status: z.enum(['running', 'completed', 'failed', 'cancelled']), errorCode: ApiErrorCodeSchema.nullable(), createdAt: IsoDateTimeSchema });
+export const AskRunSchema = z.object({ id: IdSchema, clientMessageId: z.uuid(), status: z.enum(['running', 'completed', 'failed', 'cancelled']), progress: z.enum(['thinking','searching','reading','preparing','answering']).default('thinking'), partialText: z.string().max(8000).default(''), errorCode: ApiErrorCodeSchema.nullable(), createdAt: IsoDateTimeSchema });
 export type AskRun = z.infer<typeof AskRunSchema>;
 export const AskSessionDetailSchema = z.object({ session: AskSessionSchema, messages: AskMessagePageSchema, latestRun: AskRunSchema.nullable(), pendingAttachments: z.array(AskAttachmentSchema) });
 export const AskStatusSchema = z.object({ available: z.boolean(), imagesAvailable: z.boolean() });

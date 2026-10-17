@@ -39,6 +39,8 @@ export const DonationRequestTransitionBodySchema = z.strictObject({
 
 // ------------------------------------------------------------------- Loans
 export const LoanSchema = z.object({
+  listingTitle: z.string().max(100).optional(),
+  allowedActions: z.array(LoanStatusSchema.exclude(['pending'])).optional(),
   id: IdSchema,
   listingId: IdSchema,
   ownerId: z.string(),
@@ -57,6 +59,7 @@ export const LoanSchema = z.object({
   updatedAt: IsoDateTimeSchema,
 });
 export type Loan = z.infer<typeof LoanSchema>;
+export const LoanPageSchema = pageOf(LoanSchema);
 
 export const CreateLoanBodySchema = z.strictObject({
   listingId: IdSchema,

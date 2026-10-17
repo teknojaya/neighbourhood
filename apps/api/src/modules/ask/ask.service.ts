@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { MarketplaceActionSchema, modelSafe, type MarketplaceAction } from '@neighbourhood/shared';
+import { executeMarketplace, authorizeProposal, marketplaceSummary } from './ask.marketplace.js';
 import type { Content, Part } from '@google/genai';
 import {
   ASK_LIMITS, AskActionPayloadSchema, AskActionSchema, AskMessageSchema, DomainError,
@@ -17,7 +19,7 @@ import { actionDto, attachmentDto, runDto, sessionDto } from './ask.dto.js';
 
 const LEASE_MS = ASK_LIMITS.turnMs + 15_000;
 const knownError = (err: unknown) => err instanceof HttpError ? err : err instanceof DomainError ? new HttpError(err.code, err.message) : null;
-export type AskService = Pick<PrismaAskService, 'status' | 'list' | 'create' | 'detail' | 'send' | 'stop' | 'upload' | 'image' | 'removeAttachment' | 'deleteSession' | 'confirm' | 'cancelAction' | 'editNeed'>;
+export type AskService = Pick<PrismaAskService, 'status' | 'list' | 'create' | 'detail' | 'send' | 'stop' | 'upload' | 'image' | 'removeAttachment' | 'deleteSession' | 'confirm' | 'cancelAction' | 'editNeed' | 'prepareFromUi'>;
 
 export class PrismaAskService {
   private readonly tools: AskTools;
@@ -106,7 +108,7 @@ export class PrismaAskService {
         const latest = await tx.askRun.findFirst({ where: { sessionId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
         if (latest?.id !== existing.id) throw new HttpError('CONFLICT', 'This turn is no longer the latest; send a new message');
         await tx.askAction.updateMany({ where: { runId: existing.id, status: 'pending' }, data: { status: 'cancelled' } });
-        const run = await tx.askRun.update({ where: { id: existing.id }, data: { status: 'running', errorCode: null, startedAt: new Date(), attemptId: randomUUID() } });
+        const run = await tx.askRun.update({ where: { id: existing.id }, data: { status: 'running', errorCode: null, progress: 'thinking', partialText: '', startedAt: new Date(), attemptId: randomUUID() } });
         return { run, execute: true };
       }
       const ids = [...new Set(body.attachmentIds)];
@@ -131,7 +133,7 @@ export class PrismaAskService {
       let finalText = '';
       for (let round = 0; round < ASK_LIMITS.modelRounds; round++) {
         signal.throwIfAborted();
-        const output = await this.model.generate(contents, this.tools.declarations(), signal);
+        const output = await this.model.generate(contents, this.tools.declarations(), signal, async text => { await this.db.askRun.updateMany({ where: { id: run.id, attemptId: run.attemptId, status: 'running' }, data: { progress: 'answering', partialText: text } }); });
         signal.throwIfAborted();
         const functionParts = output.parts?.filter((p) => p.functionCall) ?? [];
         if (!functionParts.length) {
@@ -146,6 +148,8 @@ export class PrismaAskService {
         for (const part of functionParts) {
           calls++;
           const call = part.functionCall!;
+          const progress = call.name === 'search_listings' ? 'searching' : call.name?.startsWith('prepare_') || call.name === 'draft_listing' ? 'preparing' : 'reading';
+          await this.db.askRun.updateMany({ where: { id: run.id, attemptId: run.attemptId, status: 'running' }, data: { progress, partialText: '' } });
           let result: unknown;
           try {
             const executed = await this.tools.execute(call.name ?? '', call.args ?? {}, { userId, sessionId, runId: run.id, attemptId: run.attemptId, signal });
@@ -206,7 +210,7 @@ export class PrismaAskService {
     const contents: Content[] = [];
     let chars = 0;
     for (const message of [...messages].reverse()) {
-      const cardContext = message.parts.length ? `\nServer cards: ${JSON.stringify(message.parts).slice(0, 6000)}` : '';
+      const cardContext = message.parts.length ? `\nServer cards: ${JSON.stringify(modelSafe(message.parts)).slice(0, 6000)}` : '';
       const text = `${message.text}${cardContext}`;
       if (chars + text.length > 32_000 && contents.length) break;
       chars += text.length;
@@ -245,7 +249,7 @@ export class PrismaAskService {
         return attachmentDto(row);
       }, { maxWait: 10_000, timeout: 15_000 });
     } catch (err) {
-      try { await this.images.delete(path); } catch { logger.warn('ask_upload_cleanup_failed', { attachmentId: id }); }
+      try { if (await this.db.askAttachment.count({ where: { storagePath: path } }) === 0) await this.images.delete(path); } catch { logger.warn('ask_upload_cleanup_failed', { attachmentId: id }); }
       if (err instanceof HttpError) throw err;
       throw new HttpError('AUTH_NOT_CONFIGURED', 'Image storage is unavailable');
     }
@@ -342,9 +346,9 @@ export class PrismaAskService {
       if (current.status === 'completed') return { execute: false, row: current };
       if (current.revision !== revision) throw new HttpError('CONFLICT', 'Review the updated action before confirming');
       if (current.status === 'executing' && current.startedAt && Date.now() - current.startedAt.getTime() < 30_000) return { execute: false, row: current };
-      if (current.status === 'executing' && current.startedAt && Date.now() - current.startedAt.getTime() > 20 * 60 * 60_000) throw new HttpError('CONFLICT', 'This action needs manual status verification');
+      if (current.firstStartedAt && Date.now() - current.firstStartedAt.getTime() > 20 * 60 * 60_000) throw new HttpError('CONFLICT', 'This action needs manual status verification');
       if (current.status !== 'executing' && (current.status !== 'pending' || current.expiresAt.getTime() <= Date.now())) throw new HttpError('CONFLICT', 'This action was cancelled or expired');
-      const updated = await tx.askAction.update({ where: { id: actionId }, data: { status: 'executing', startedAt: new Date(), errorCode: null } });
+      const updated = await tx.askAction.update({ where: { id: actionId }, data: { status: 'executing', startedAt: new Date(), firstStartedAt: current.firstStartedAt ?? new Date(), errorCode: null } });
       return { execute: true, row: updated };
     });
     if (!claim.execute) return actionDto(claim.row);
@@ -353,6 +357,18 @@ export class PrismaAskService {
     let receipt: { message: string; link: string | null };
     try {
       switch (payload.kind) {
+        case 'marketplace': {
+          if (!this.services.marketplace) throw new HttpError('CONFLICT', 'Marketplace service unavailable');
+          receipt = await executeMarketplace(this.db, this.services.marketplace, userId, key, payload.action);
+          if (payload.action.operation === 'listing_publish' && payload.action.attachmentIds.length) {
+            const listingId = receipt.link!.split('/').at(-1)!;
+            for (const attachmentId of payload.action.attachmentIds) {
+              const photo = await this.image(userId, row.sessionId, attachmentId);
+              await this.services.marketplace.listings.uploadPhoto(userId, listingId, photo.bytes, photo.mimeType, `${key}_photo_${attachmentId}`);
+            }
+          }
+          break;
+        }
         case 'save_need': {
           await this.services.needs.save(userId, key, { extraction: payload.extraction });
           receipt = { message: 'Need saved', link: '/needs/saved' }; break;
@@ -374,12 +390,33 @@ export class PrismaAskService {
       // A definite domain rejection did not commit. Unknown failures keep the claim
       // immutable so recovery can replay the SAME domain idempotency key.
       const failure = knownError(err);
-      const definite = failure !== null && failure.status < 500;
+      const definite = failure !== null && failure.status < 500 && !(payload.kind === 'marketplace' && payload.action.operation === 'listing_publish');
       await this.db.askAction.update({ where: { id: actionId }, data: { status: definite ? 'pending' : 'executing', errorCode: failure?.code ?? 'INTERNAL' } });
       if (failure) throw failure;
       throw new HttpError('INTERNAL', 'Check this action\'s status before retrying');
     }
     const completed = await this.db.askAction.update({ where: { id: actionId }, data: { status: 'completed', receipt, errorCode: null } });
     return AskActionSchema.parse(actionDto(completed));
+  }
+
+  async prepareFromUi(userId: string, sessionId: string, clientId: string, input: MarketplaceAction) {
+    await this.owned(userId, sessionId);
+    if (!this.services.marketplace) throw new HttpError('CONFLICT', 'Marketplace unavailable');
+    const action = await authorizeProposal(this.db, this.services.marketplace, userId, MarketplaceActionSchema.parse(input));
+    const summary = await marketplaceSummary(this.db, this.services.marketplace, userId, action);
+    const { runIdempotent } = await import('../requests/idempotency.js');
+    const result = await runIdempotent(this.db, userId, clientId, `ask:${sessionId}:proposal`, action, async tx => {
+      const session = await this.lockSession(tx, userId, sessionId);
+      if (action.operation === 'listing_publish') {
+        const count = await tx.askAttachment.count({ where: { id: { in: action.attachmentIds }, sessionId } });
+        if (count !== new Set(action.attachmentIds).size) throw new HttpError('NOT_FOUND', 'Photo unavailable');
+      }
+      const row = await tx.askAction.create({ data: { sessionId, runId: randomUUID(), payload: { kind: 'marketplace', action }, summary, expiresAt: new Date(Date.now() + 10 * 60_000) } });
+      const proposal = actionDto(row);
+      await tx.askMessage.create({ data: { sessionId, sequence: session.nextSequence, role: 'assistant', text: 'Review these details before confirming.', parts: [{ kind: 'action', action: proposal }] as unknown as Prisma.InputJsonValue } });
+      await tx.askSession.update({ where: { id: sessionId }, data: { nextSequence: { increment: 1 } } });
+      return { status: 201, body: proposal };
+    });
+    return result.body;
   }
 }

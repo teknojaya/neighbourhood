@@ -12,6 +12,7 @@ import { Alert, Button, Card, TextField } from '../../components/ui';
 import { hasMessage, t, type MessageKey } from '../../i18n';
 import { api, ApiError } from '../../lib/api';
 import { useOnline } from '../../lib/useOnline';
+import { DemoSignIn } from './DemoSignIn';
 
 function errorKey(err: unknown): MessageKey {
   if (err instanceof ApiError) {
@@ -91,6 +92,7 @@ export function LoginPage() {
         <p className="text-2xl font-bold text-brand-800">{t('app.name')}</p>
         <p className="text-sm text-stone-600">{t('app.tagline')}</p>
       </div>
+      <DemoSignIn />
       <Card className="space-y-4">
         <div>
           <h1 className="text-xl font-semibold">{t('auth.signIn')}</h1>

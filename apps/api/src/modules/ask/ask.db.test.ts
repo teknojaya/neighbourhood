@@ -67,6 +67,17 @@ afterAll(async () => {
 });
 
 describe('Ask sessions, agent tools and confirmed actions against PostgreSQL', () => {
+  it('persists partial reply progress and prevents a stopped stream from committing a reply', async () => {
+    let ready!: () => void, release!: () => void;
+    const started = new Promise<void>(resolve => { ready = resolve; }); const gate = new Promise<void>(resolve => { release = resolve; });
+    const model = Object.assign(new FakeModel(), { generate: async (_contents: Content[], _tools: unknown, _signal: AbortSignal, onText?: (text: string) => Promise<void>) => { await onText?.('A partial visible reply'); ready(); await gate; return reply; } });
+    const f = await fixture(model);
+    const pending = f.ask.send(f.user.id, f.session.id, send('Tell me about sharing'));
+    try { await started; const detail = await f.ask.detail(f.user.id, f.session.id); expect(detail.latestRun).toMatchObject({ status: 'running', progress: 'answering', partialText: 'A partial visible reply' }); await f.ask.stop(f.user.id, f.session.id); }
+    finally { release(); }
+    expect((await pending).status).toBe('cancelled');
+    expect((await f.ask.detail(f.user.id, f.session.id)).messages.items.some(message => message.text === 'A partial visible reply')).toBe(false);
+  });
   it('authenticates routes, isolates histories and creates a session once on retry', async () => {
     const a = await fixture(), b = await fixture();
     await request(a.app).get('/api/v1/ask/status').expect(401);

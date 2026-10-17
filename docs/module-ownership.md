@@ -1,5 +1,10 @@
 # Module ownership
 
+> Historical ownership split. `feat/marketplace-integration` now combines both
+> engineer branches and fills missing services under the user's authorization.
+> Use [implementation-status.md](implementation-status.md) and
+> [integration-handoff.md](integration-handoff.md) for current dependencies.
+
 > **Updated 2026-10-17: architecture change.** PostgreSQL (Prisma 7 migrations; Cloud SQL in production) has replaced Firestore.
 > Sign-in now uses **Google** or a **numeric email OTP** (both via Firebase Auth; there are no passwords).
 > Firebase still provides Authentication, FCM and Cloud Storage. Any section below that mentions Firestore collections, rules or the Firestore emulator is out of date.

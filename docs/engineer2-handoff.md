@@ -1,4 +1,8 @@
-# Engineer 2 handoff: requests and communication
+# Engineer 2 handoff: requests and communication (historical)
+
+> This records the original Engineer 2 check-in. Engineer 1 is now integrated
+> on `feat/marketplace-integration`; the code dependencies below have been
+> resolved. See [integration-handoff.md](integration-handoff.md).
 
 Branch: `feat/requests-communication`. Donation requests, private chat, in-app
 notifications, and private saved needs are implemented. They have HTTP tests

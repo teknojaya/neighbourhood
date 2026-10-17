@@ -1,7 +1,8 @@
 # Ask: marketplace chat agent plan
 
-Status: target design, 2026-10-17. The session/history/image/tool foundation is
-implemented; see `ask-agent-handoff.md` for current capabilities and limits.
+Status: original target design, 2026-10-17. Marketplace integration is now
+implemented; see [integration-handoff.md](integration-handoff.md) for current
+capabilities, verification and deployment prerequisites.
 User direction: all user-facing marketplace workflows should be
 reachable through Ask, including finding items and donating products.
 

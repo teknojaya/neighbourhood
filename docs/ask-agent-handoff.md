@@ -1,4 +1,9 @@
-# Ask agent: implemented foundation
+# Ask agent: implemented foundation (historical)
+
+> This records the pre-integration Engineer 2 branch. The current Ask includes
+> marketplace discovery/publication, loans, community and inventory tools,
+> streaming progress and matching. See [integration handoff](integration-handoff.md)
+> and [architecture](architecture.md) for current behavior and provider limits.
 
 Branch: `feat/requests-communication`. The Ask route (`/needs`) now uses a
 conversational agent. Saved needs remain independently accessible at

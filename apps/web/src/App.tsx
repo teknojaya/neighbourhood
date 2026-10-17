@@ -7,6 +7,7 @@ import { LoginPage } from './features/auth/AuthPages';
 import { CommunitiesPage } from './features/communities/CommunitiesPage';
 import { HomePage } from './features/home/HomePage';
 import { ExplorePage } from './features/listings/ExplorePage';
+import { ListingDetailPage } from './features/listings/ListingDetailPage';
 import { MedicinePage } from './features/medicine/MedicinePage';
 import { MessagesPage } from './features/messages/MessagesPage';
 import { NeedsAssistantPage } from './features/needs/NeedsAssistantPage';
@@ -32,6 +33,7 @@ const router = createBrowserRouter([
           { index: true, element: <HomePage /> },
           { path: 'needs', element: <NeedsAssistantPage /> },
           { path: 'explore', element: <ExplorePage /> },
+          { path: 'listings/:id', element: <ListingDetailPage /> },
           { path: 'activity', element: <ActivityPage /> },
           { path: 'communities', element: <CommunitiesPage /> },
           { path: 'messages', element: <MessagesPage /> },

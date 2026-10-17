@@ -8,7 +8,7 @@ export interface ObjectStorage {
   signedUploadUrl(path: string, contentType: string, ttlSeconds?: number): Promise<string>;
 }
 
-const SAFE_PATH = /^(uploads|listings)\/[A-Za-z0-9_-]+\/[A-Za-z0-9._-]{1,120}$/;
+export const SAFE_PATH = /^(uploads|listings)\/[A-Za-z0-9_-]+\/[A-Za-z0-9._-]{1,120}$/;
 
 /**
  * Cloud Storage for Firebase (images). Clients never get bucket access:
@@ -50,3 +50,33 @@ export class FirebaseObjectStorage implements ObjectStorage {
     if (!SAFE_PATH.test(path)) throw new Error('Invalid storage path');
   }
 }
+
+/**
+ * Local filesystem storage provider for offline development and emulator mode.
+ * Stores binary payloads locally and generates local API endpoints for upload and display.
+ */
+export class LocalFileObjectStorage implements ObjectStorage {
+  constructor(private readonly baseDir: string = 'uploads') {}
+
+  async signedReadUrl(path: string): Promise<string> {
+    this.assertPath(path);
+    return `/api/v1/storage/file?path=${encodeURIComponent(path)}`;
+  }
+
+  async signedUploadUrl(path: string, contentType: string): Promise<string> {
+    this.assertPath(path);
+    if (!(AI_LIMITS.imageMimeTypes as readonly string[]).includes(contentType)) {
+      throw new Error('Unsupported image type');
+    }
+    return `/api/v1/storage/upload?path=${encodeURIComponent(path)}`;
+  }
+
+  getBaseDir(): string {
+    return this.baseDir;
+  }
+
+  private assertPath(path: string) {
+    if (!SAFE_PATH.test(path)) throw new Error('Invalid storage path');
+  }
+}
+

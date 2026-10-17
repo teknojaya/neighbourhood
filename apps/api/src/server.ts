@@ -1,9 +1,11 @@
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
+import { getStorage } from 'firebase-admin/storage';
 import { createApp } from './app.js';
 import { ConfigError, loadConfig } from './config.js';
 import { createDb } from './lib/db.js';
 import { logger } from './lib/logger.js';
+import { FirebaseObjectStorage, LocalFileObjectStorage } from './lib/storage.js';
 import { AiService } from './modules/ai/ai.service.js';
 import { GeminiAdapter } from './modules/ai/gemini.adapter.js';
 import { PrismaAccessRepository } from './modules/auth/access.js';
@@ -13,10 +15,22 @@ import { SmtpEmailSender } from './modules/email-otp/email.sender.js';
 import { FirebaseIdentityProvider } from './modules/email-otp/firebase-identity.js';
 import { PrismaOtpChallengeRepository } from './modules/email-otp/otp.repository.js';
 import { EmailOtpService } from './modules/email-otp/otp.service.js';
+import { ListingsService } from './modules/listings/listings.service.js';
 import { PrismaProfilesRepository } from './modules/profiles/profiles.repository.js';
 import { ProfilesService } from './modules/profiles/profiles.service.js';
 
 function main() {
+  // Safe environment loading for local development
+  try {
+    process.loadEnvFile('.env');
+  } catch {
+    try {
+      process.loadEnvFile('../../.env');
+    } catch {
+      // In CI or deployed Cloud Run, variables come from process.env
+    }
+  }
+
   let config;
   try {
     config = loadConfig();
@@ -51,6 +65,16 @@ function main() {
     Boolean(config.firebase.projectId),
   );
 
+  const isEmulator = config.firebase.useEmulators;
+  const localStorage = isEmulator ? new LocalFileObjectStorage() : undefined;
+
+  const storage = isEmulator
+    ? localStorage
+    : config.firebase.storageBucket
+    ? new FirebaseObjectStorage(getStorage(firebaseApp), config.firebase.storageBucket)
+    : undefined;
+  const listings = new ListingsService(db, storage);
+
   const app = createApp({
     config,
     tokenVerifier: new FirebaseTokenVerifier(firebaseAuth),
@@ -59,6 +83,8 @@ function main() {
     otp,
     profiles: new ProfilesService(new PrismaProfilesRepository(db), access),
     ai: new AiService(generator),
+    listings,
+    localStorage,
   });
 
   const server = app.listen(config.port, () => {

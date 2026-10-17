@@ -1,0 +1,19 @@
+rules_version = '2';
+
+// Direct client access denied. Listing photos will be uploaded through the
+// API or via a narrowly scoped rule added by the listings owner, e.g.:
+//
+//   match /uploads/{uid}/{file} {
+//     allow create: if request.auth.uid == uid
+//       && request.resource.size < 4 * 1024 * 1024
+//       && request.resource.contentType.matches('image/(jpeg|png|webp)');
+//   }
+//
+// Reads are served by the API with short-lived signed URLs.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

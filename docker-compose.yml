@@ -1,0 +1,23 @@
+# Local development database only. Credentials below are for a local,
+# non-networked container and are not used anywhere else.
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: neighbourhood-postgres
+    environment:
+      POSTGRES_USER: neighbourhood
+      POSTGRES_PASSWORD: neighbourhood_local
+      POSTGRES_DB: neighbourhood
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./apps/api/prisma/docker-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U neighbourhood -d neighbourhood"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pgdata:

@@ -1,0 +1,569 @@
+// NeighbourHood PostgreSQL schema (Prisma ORM 7).
+// Constraints Prisma cannot express (CHECK, partial unique, exclusion) are
+// added as raw SQL in migrations — see migrations/*/migration.sql.
+
+generator client {
+  provider               = "prisma-client"
+  output                 = "../src/generated/prisma"
+  moduleFormat           = "esm"
+  importFileExtension    = "js"
+  generatedFileExtension = "ts"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ------------------------------------------------------------------ enums
+enum PlatformRole {
+  staff
+  medicine_partner
+}
+
+enum CommunityRole {
+  member
+  volunteer
+  moderator
+}
+
+enum MembershipStatus {
+  pending
+  active
+  removed
+}
+
+enum JoinPolicy {
+  open
+  approval_required
+}
+
+enum UiLanguage {
+  en
+  id
+}
+
+enum ItemCategory {
+  groceries
+  clothing
+  books
+  household
+  appliances
+  mobility_aids
+}
+
+enum ListingMode {
+  donate
+  lend
+}
+
+enum ItemCondition {
+  new
+  like_new
+  good
+  fair
+  needs_repair
+}
+
+enum CollectionMethod {
+  owner_location
+  community_point
+}
+
+enum ListingStatus {
+  draft
+  active
+  paused
+  closed
+}
+
+enum DonationRequestStatus {
+  pending
+  approved
+  rejected
+  cancelled
+  collected
+  expired
+}
+
+enum LoanStatus {
+  pending
+  approved
+  rejected
+  cancelled
+  checked_out
+  returned
+}
+
+enum DepositStatus {
+  proposed
+  accepted
+  rejected
+}
+
+enum StockAdjustmentReason {
+  deposit_accepted
+  collected
+  damaged
+  expired
+  correction
+}
+
+enum PointKind {
+  box
+  pantry
+  shelf
+  partner_desk
+}
+
+enum MedicineCaseStatus {
+  submitted
+  under_review
+  referred
+  closed
+  withdrawn
+}
+
+enum ContactPreference {
+  in_app
+  phone
+}
+
+// ------------------------------------------------------------- identity
+/// One row per person. Created on first verified sign-in (Google or email OTP).
+/// `email` is stored lower-cased and is unique: the same email can never
+/// produce a second user, regardless of sign-in method.
+model User {
+  id                String      @id @default(uuid()) @db.Uuid
+  firebaseUid       String      @unique @map("firebase_uid")
+  email             String      @unique
+  emailVerified     Boolean     @default(false) @map("email_verified")
+  displayName       String?     @map("display_name") @db.VarChar(60)
+  areaLabel         String?     @map("area_label") @db.VarChar(120)
+  preferredLanguage UiLanguage  @default(en) @map("preferred_language")
+  /// Private: exact home point, never exposed publicly.
+  homeLat           Float?      @map("home_lat")
+  homeLng           Float?      @map("home_lng")
+  searchRadiusKm    Int         @default(3) @map("search_radius_km")
+  disabledAt        DateTime?   @map("disabled_at") @db.Timestamptz(3)
+  createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  roles             UserRole[]  @relation("RoleHolder")
+  rolesGranted      UserRole[]  @relation("RoleGrantor")
+  memberships       CommunityMembership[] @relation("Member")
+  membershipsGranted CommunityMembership[] @relation("MembershipGrantor")
+  listings          Listing[]
+  requestsMade      DonationRequest[] @relation("Requester")
+  requestsReceived  DonationRequest[] @relation("RequestOwner")
+  loansBorrowed     Loan[]      @relation("Borrower")
+  loansLent         Loan[]      @relation("Lender")
+  conversations     ConversationParticipant[]
+  messages          Message[]
+  notifications     Notification[]
+  pushTokens        PushToken[]
+  needs             Need[]
+  deposits          Deposit[]   @relation("Donor")
+  depositsReviewed  Deposit[]   @relation("Reviewer")
+  stockAdjustments  StockAdjustment[]
+  medicineCases     MedicineCase[]
+  partnerMemberships PartnerOrganizationMember[]
+  idempotencyKeys   IdempotencyKey[]
+
+  @@map("users")
+}
+
+/// Server-controlled platform roles. Written only by operator tooling.
+model UserRole {
+  userId      String       @map("user_id") @db.Uuid
+  role        PlatformRole
+  grantedById String?      @map("granted_by_id") @db.Uuid
+  grantedAt   DateTime     @default(now()) @map("granted_at") @db.Timestamptz(3)
+  user        User         @relation("RoleHolder", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy   User?        @relation("RoleGrantor", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  @@id([userId, role])
+  @@map("user_roles")
+}
+
+/// Pending numeric email OTP challenges. Only an HMAC of the code is stored.
+model EmailOtpChallenge {
+  id          String    @id @default(uuid()) @db.Uuid
+  email       String
+  codeHash    String    @map("code_hash")
+  attempts    Int       @default(0)
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(3)
+  consumedAt  DateTime? @map("consumed_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([email, createdAt])
+  @@map("email_otp_challenges")
+}
+
+// ---------------------------------------------------------- communities
+model Community {
+  id          String     @id @default(uuid()) @db.Uuid
+  name        String     @db.VarChar(80)
+  description String     @default("") @db.VarChar(1000)
+  areaLabel   String     @map("area_label") @db.VarChar(120)
+  joinPolicy  JoinPolicy @default(open) @map("join_policy")
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  members     CommunityMembership[]
+  points      CommunityPoint[]
+
+  @@map("communities")
+}
+
+model CommunityMembership {
+  communityId String           @map("community_id") @db.Uuid
+  userId      String           @map("user_id") @db.Uuid
+  role        CommunityRole    @default(member)
+  status      MembershipStatus @default(active)
+  grantedById String?          @map("granted_by_id") @db.Uuid
+  updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  community   Community        @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  user        User             @relation("Member", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy   User?            @relation("MembershipGrantor", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  @@id([communityId, userId])
+  @@index([userId, status])
+  @@map("community_memberships")
+}
+
+/// Partner-managed collection point. Exact address is private unless the
+/// partner consented to publishing it.
+model CommunityPoint {
+  id                    String    @id @default(uuid()) @db.Uuid
+  communityId           String    @map("community_id") @db.Uuid
+  name                  String    @db.VarChar(80)
+  kind                  PointKind
+  partnerName           String    @map("partner_name") @db.VarChar(120)
+  exactAddress          String    @map("exact_address") @db.VarChar(300)
+  publicAddressConsent  Boolean   @default(false) @map("public_address_consent")
+  consentedBy           String?   @map("consented_by") @db.VarChar(120)
+  consentedAt           DateTime? @map("consented_at") @db.Timestamptz(3)
+  lat                   Float
+  lng                   Float
+  geohash               String    @db.VarChar(12)
+  areaLabel             String    @map("area_label") @db.VarChar(120)
+  openingHours          String?   @map("opening_hours") @db.VarChar(300)
+  /// Opaque random id printed as QR. Identifies the point only.
+  qrId                  String    @unique @map("qr_id") @db.VarChar(64)
+  active                Boolean   @default(true)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  community             Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  inventory             PointInventoryItem[]
+  deposits              Deposit[]
+  adjustments           StockAdjustment[]
+  listings              Listing[]
+
+  @@index([active, geohash])
+  @@map("community_points")
+}
+
+model PointInventoryItem {
+  id         String       @id @default(uuid()) @db.Uuid
+  pointId    String       @map("point_id") @db.Uuid
+  category   ItemCategory
+  title      String       @db.VarChar(100)
+  available  Int          @default(0)
+  reserved   Int          @default(0)
+  bestBefore DateTime?    @map("best_before") @db.Date
+  updatedAt  DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  point      CommunityPoint @relation(fields: [pointId], references: [id], onDelete: Cascade)
+  adjustments StockAdjustment[]
+
+  @@map("point_inventory_items")
+}
+
+model Deposit {
+  id           String        @id @default(uuid()) @db.Uuid
+  pointId      String        @map("point_id") @db.Uuid
+  donorId      String        @map("donor_id") @db.Uuid
+  /// [{category,title,quantity,bestBefore}] validated by DepositSchema.
+  items        Json
+  status       DepositStatus @default(proposed)
+  reviewedById String?       @map("reviewed_by_id") @db.Uuid
+  reviewNote   String?       @map("review_note") @db.VarChar(300)
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  reviewedAt   DateTime?     @map("reviewed_at") @db.Timestamptz(3)
+  point        CommunityPoint @relation(fields: [pointId], references: [id], onDelete: Cascade)
+  donor        User          @relation("Donor", fields: [donorId], references: [id])
+  reviewedBy   User?         @relation("Reviewer", fields: [reviewedById], references: [id])
+  adjustments  StockAdjustment[]
+
+  @@index([pointId, status])
+  @@map("deposits")
+}
+
+/// Append-only audit of point inventory changes.
+model StockAdjustment {
+  id        String                @id @default(uuid()) @db.Uuid
+  pointId   String                @map("point_id") @db.Uuid
+  itemId    String                @map("item_id") @db.Uuid
+  delta     Int
+  reason    StockAdjustmentReason
+  actorId   String                @map("actor_id") @db.Uuid
+  depositId String?               @map("deposit_id") @db.Uuid
+  requestId String?               @map("request_id") @db.Uuid
+  note      String?               @db.VarChar(300)
+  createdAt DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  point     CommunityPoint        @relation(fields: [pointId], references: [id], onDelete: Cascade)
+  item      PointInventoryItem    @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  actor     User                  @relation(fields: [actorId], references: [id])
+  deposit   Deposit?              @relation(fields: [depositId], references: [id])
+
+  @@index([pointId, createdAt])
+  @@map("stock_adjustments")
+}
+
+// ------------------------------------------------------------- listings
+model Listing {
+  id               String           @id @default(uuid()) @db.Uuid
+  ownerId          String           @map("owner_id") @db.Uuid
+  status           ListingStatus    @default(draft)
+  mode             ListingMode
+  category         ItemCategory
+  title            String           @db.VarChar(100)
+  description      String           @default("") @db.VarChar(2000)
+  condition        ItemCondition
+  /// Quantity accounting is separate from status. CHECKs in migration.
+  stockTotal       Int              @map("stock_total")
+  stockReserved    Int              @default(0) @map("stock_reserved")
+  stockCollected   Int              @default(0) @map("stock_collected")
+  areaLabel        String           @map("area_label") @db.VarChar(120)
+  /// Exact coordinates for search only; never returned in public DTOs.
+  lat              Float
+  lng              Float
+  geohash          String           @db.VarChar(12)
+  collectionMethod CollectionMethod @map("collection_method")
+  communityPointId String?          @map("community_point_id") @db.Uuid
+  /// ApplianceDetailsSchema JSON; null for non-appliances.
+  appliance        Json?
+  maxLoanDays      Int?             @map("max_loan_days")
+  lendingNotes     String?          @map("lending_notes") @db.VarChar(500)
+  bestBefore       DateTime?        @map("best_before") @db.Date
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  owner            User             @relation(fields: [ownerId], references: [id])
+  communityPoint   CommunityPoint?  @relation(fields: [communityPointId], references: [id])
+  private          ListingPrivate?
+  photos           ListingPhoto[]
+  requests         DonationRequest[]
+  loans            Loan[]
+
+  @@index([status, geohash])
+  @@index([ownerId, updatedAt])
+  @@map("listings")
+}
+
+/// Private pickup details. Owner + approved participants only.
+model ListingPrivate {
+  listingId          String  @id @map("listing_id") @db.Uuid
+  pickupInstructions String  @map("pickup_instructions") @db.VarChar(1000)
+  contactNote        String? @map("contact_note") @db.VarChar(300)
+  listing            Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@map("listing_private")
+}
+
+/// Images live in Cloud Storage (Firebase Storage); only object paths here.
+model ListingPhoto {
+  id          String   @id @default(uuid()) @db.Uuid
+  listingId   String   @map("listing_id") @db.Uuid
+  storagePath String   @map("storage_path") @db.VarChar(300)
+  position    Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  listing     Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, position])
+  @@map("listing_photos")
+}
+
+// ------------------------------------------------- requests and loans
+model DonationRequest {
+  id           String                @id @default(uuid()) @db.Uuid
+  listingId    String                @map("listing_id") @db.Uuid
+  ownerId      String                @map("owner_id") @db.Uuid
+  requesterId  String                @map("requester_id") @db.Uuid
+  quantity     Int
+  message      String                @default("") @db.VarChar(500)
+  status       DonationRequestStatus @default(pending)
+  pickupBy     DateTime?             @map("pickup_by") @db.Timestamptz(3)
+  createdAt    DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  listing      Listing               @relation(fields: [listingId], references: [id])
+  owner        User                  @relation("RequestOwner", fields: [ownerId], references: [id])
+  requester    User                  @relation("Requester", fields: [requesterId], references: [id])
+  conversation Conversation?
+
+  @@index([ownerId, createdAt(sort: Desc)])
+  @@index([requesterId, createdAt(sort: Desc)])
+  @@index([status, pickupBy])
+  @@map("donation_requests")
+}
+
+model Loan {
+  id                  String     @id @default(uuid()) @db.Uuid
+  listingId           String     @map("listing_id") @db.Uuid
+  ownerId             String     @map("owner_id") @db.Uuid
+  borrowerId          String     @map("borrower_id") @db.Uuid
+  startDate           DateTime   @map("start_date") @db.Date
+  endDate             DateTime   @map("end_date") @db.Date
+  status              LoanStatus @default(pending)
+  checkedOutAt        DateTime?  @map("checked_out_at") @db.Timestamptz(3)
+  returnedAt          DateTime?  @map("returned_at") @db.Timestamptz(3)
+  returnConditionNote String?    @map("return_condition_note") @db.VarChar(500)
+  message             String     @default("") @db.VarChar(500)
+  createdAt           DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  listing             Listing    @relation(fields: [listingId], references: [id])
+  owner               User       @relation("Lender", fields: [ownerId], references: [id])
+  borrower            User       @relation("Borrower", fields: [borrowerId], references: [id])
+  conversation        Conversation?
+
+  @@index([listingId, status])
+  @@index([ownerId, createdAt(sort: Desc)])
+  @@index([borrowerId, createdAt(sort: Desc)])
+  @@map("loans")
+}
+
+// ----------------------------------------------------------------- chat
+/// One private conversation per donation request or loan (CHECK: exactly one).
+model Conversation {
+  id                String    @id @default(uuid()) @db.Uuid
+  donationRequestId String?   @unique @map("donation_request_id") @db.Uuid
+  loanId            String?   @unique @map("loan_id") @db.Uuid
+  closed            Boolean   @default(false)
+  lastMessageAt     DateTime? @map("last_message_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  donationRequest   DonationRequest? @relation(fields: [donationRequestId], references: [id], onDelete: Cascade)
+  loan              Loan?     @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  participants      ConversationParticipant[]
+  messages          Message[]
+
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  conversationId String       @map("conversation_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  lastReadAt     DateTime?    @map("last_read_at") @db.Timestamptz(3)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@index([userId])
+  @@map("conversation_participants")
+}
+
+model Message {
+  id             String       @id @default(uuid()) @db.Uuid
+  conversationId String       @map("conversation_id") @db.Uuid
+  senderId       String       @map("sender_id") @db.Uuid
+  body           String       @db.VarChar(2000)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation(fields: [senderId], references: [id])
+
+  @@index([conversationId, createdAt(sort: Desc), id(sort: Desc)])
+  @@map("messages")
+}
+
+// -------------------------------------------------------- notifications
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  type      String    @db.VarChar(40)
+  title     String    @db.VarChar(120)
+  body      String    @db.VarChar(300)
+  link      String?   @db.VarChar(200)
+  readAt    DateTime? @map("read_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+/// FCM registration tokens, stored only after explicit opt-in.
+model PushToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  token      String   @unique @db.VarChar(4096)
+  platform   String   @default("web") @db.VarChar(10)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastSeenAt DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_tokens")
+}
+
+// ---------------------------------------------------------------- needs
+/// A need the user reviewed and saved after AI extraction.
+model Need {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  extraction Json
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("needs")
+}
+
+// -------------------------------------------- medicine assistance (private)
+model PartnerOrganization {
+  id         String    @id @default(uuid()) @db.Uuid
+  name       String    @db.VarChar(120)
+  verifiedAt DateTime? @map("verified_at") @db.Timestamptz(3)
+  members    PartnerOrganizationMember[]
+  cases      MedicineCase[]
+
+  @@map("partner_organizations")
+}
+
+model PartnerOrganizationMember {
+  orgId  String              @map("org_id") @db.Uuid
+  userId String              @map("user_id") @db.Uuid
+  org    PartnerOrganization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user   User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([orgId, userId])
+  @@map("partner_organization_members")
+}
+
+model MedicineCase {
+  id               String             @id @default(uuid()) @db.Uuid
+  requesterId      String             @map("requester_id") @db.Uuid
+  status           MedicineCaseStatus @default(submitted)
+  partnerOrgId     String?            @map("partner_org_id") @db.Uuid
+  /// Private: never logged, never sent to AI.
+  summary          String             @db.VarChar(1000)
+  hasPrescription  Boolean?           @map("has_prescription")
+  preferredContact ContactPreference  @map("preferred_contact")
+  consentedAt      DateTime           @map("consented_at") @db.Timestamptz(3)
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  requester        User               @relation(fields: [requesterId], references: [id])
+  partnerOrg       PartnerOrganization? @relation(fields: [partnerOrgId], references: [id])
+
+  @@index([partnerOrgId, status, createdAt])
+  @@map("medicine_cases")
+}
+
+// ---------------------------------------------------------- idempotency
+/// Stored result of a mutation keyed by (user, Idempotency-Key). Purge > 24 h.
+model IdempotencyKey {
+  userId         String   @map("user_id") @db.Uuid
+  key            String   @db.VarChar(128)
+  requestHash    String   @map("request_hash") @db.VarChar(64)
+  responseStatus Int      @map("response_status")
+  responseBody   Json     @map("response_body")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, key])
+  @@index([createdAt])
+  @@map("idempotency_keys")
+}

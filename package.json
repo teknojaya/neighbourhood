@@ -1,0 +1,41 @@
+{
+  "name": "neighbourhood",
+  "private": true,
+  "version": "0.1.0",
+  "description": "NeighbourHood \u2014 neighbours donating and lending useful items.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "workspaces": [
+    "packages/shared",
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "build:shared": "npm run build -w @neighbourhood/shared",
+    "dev": "npm run build:shared && concurrently -k -n shared,api,web -c gray,blue,green \"npm run dev -w @neighbourhood/shared\" \"npm run dev -w @neighbourhood/api\" \"npm run dev -w @neighbourhood/web\"",
+    "emulators": "firebase emulators:start --only auth --project demo-neighbourhood",
+    "typecheck": "npm run build:shared && npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "test": "npm run build:shared && npm run test --workspaces --if-present",
+    "build": "npm run build:shared && npm run build -w @neighbourhood/api && npm run build -w @neighbourhood/web",
+    "start": "npm run start -w @neighbourhood/api",
+    "check": "npm run typecheck && npm run lint && npm run test && npm run build",
+    "db:up": "docker compose up -d postgres",
+    "db:migrate": "npm run db:migrate -w @neighbourhood/api",
+    "test:db": "npm run build:shared && npm run test:db -w @neighbourhood/api"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "22.20.5",
+    "concurrently": "10.0.6",
+    "eslint": "10.13.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "firebase-tools": "15.34.0",
+    "globals": "17.13.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.2",
+    "vitest": "5.0.5"
+  }
+}

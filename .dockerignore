@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+**/dev-dist
+**/.env
+**/.env.*
+.emulator-data
+.firebase
+*.log
+service-account*.json
+.git

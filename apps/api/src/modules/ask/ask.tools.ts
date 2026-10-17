@@ -4,7 +4,7 @@ import {
   ASK_LIMITS, AskActionPayloadSchema, AskListingDraftDataSchema, AskListingDraftSchema,
   CreateDonationRequestBodySchema, DonationRequestTransitionBodySchema, NeedsExtractionSchema,
   type AskActionPayload, type AskPart, type ListingPublic,
-  ItemCategorySchema, ListingModeSchema, RadiusKmSchema, MAX_RADIUS_KM, modelSafe,
+  ItemCategorySchema, ListingModeSchema, RadiusKmSchema, MAX_RADIUS_KM, MarketplaceActionSchema, modelSafe,
 } from '@neighbourhood/shared';
 import type { Db } from '../../lib/db.js';
 import { HttpError } from '../../lib/http.js';
@@ -30,6 +30,7 @@ const paging = z.strictObject({ cursor: z.string().max(500).optional() });
 export class AskTools {
   private readonly tools = new Map<string, RegisteredTool>();
   constructor(private readonly db: Db, private readonly services: AskServices) {
+    this.add('ask_questions', 'Hand control to the resident with 1–4 focused questions and optional short answer choices (at most six per question). Ask only missing decision-relevant facts; no private addresses. Ends this turn without executing an action. Do not also prepare the action in the same turn.', z.strictObject({ questions: z.array(z.strictObject({ question: z.string().trim().min(1).max(240), options: z.array(z.string().trim().min(1).max(100)).max(6).default([]) })).min(1).max(4) }), async ({ questions }) => ({ result: { waitingForUser: true, committed: false }, parts: [{ kind: 'questions', questions }] }));
     this.add('get_product_guide', 'Read authoritative NeighbourHood product knowledge and navigation. Use for what is a community point, how roles work, giving, borrowing, saved needs, map/radius, photos and app help. Static guide; does not search neighbours or change anything.', z.strictObject({ topic: z.enum(['overview', 'roles', 'sharing', 'borrowing', 'points', 'saved_needs', 'location', 'chat', 'navigation', 'all']).default('overview') }), async ({ topic }) => ({ result: topic === 'all' ? PRODUCT_GUIDE : { topic, guide: PRODUCT_GUIDE[topic] }, parts: [] }));
     this.add('my_account', 'Read the caller’s actual baseline account label, platform roles, community memberships/statuses and whether a search location is set. No home coordinates, email or private pickup details. Use before answering about my role or memberships; neighbour is not proof of membership.', z.strictObject({}), async (_args, ctx) => {
       const user = await db.user.findUniqueOrThrow({ where: { id: ctx.userId }, select: { areaLabel: true, preferredLanguage: true, searchRadiusKm: true, homeLat: true, homeLng: true, roles: { select: { role: true } }, memberships: { select: { role: true, status: true, communityId: true, community: { select: { name: true } } }, orderBy: { updatedAt: 'desc' }, take: 100 } } });
@@ -109,12 +110,26 @@ export class AskTools {
       if (conversation.closed) throw new HttpError('CONFLICT', 'This conversation is closed');
       return this.propose(ctx, { kind: 'send_message', ...args }, conversation.listingTitle ?? 'Neighbour conversation');
     });
-    this.add('draft_listing', 'Create or update the current private listing draft. Supply only changed fields. Null means unknown. It cannot publish.', AskListingDraftDataSchema.partial(), async (args, ctx) => {
+    this.add('draft_listing', 'Create or update the current private listing draft. Supply only changed fields. Null means unknown. Photos from this turn attach automatically; earlier draft photos are preserved. includePhotos=false removes draft photos. It cannot publish.', AskListingDraftDataSchema.omit({ attachmentIds: true }).partial().extend({ includePhotos: z.boolean().optional() }), async ({ includePhotos, ...args }, ctx) => {
       const previous = await db.askDraft.findUnique({ where: { sessionId_kind: { sessionId: ctx.sessionId, kind: 'listing' } } });
-      const data = AskListingDraftDataSchema.parse({ title: null, category: null, mode: null, condition: null, quantity: null, description: null, ...(previous?.data as object ?? {}), ...args });
+      const latest = await db.askMessage.findFirst({ where: { sessionId: ctx.sessionId, role: 'user' }, orderBy: { sequence: 'desc' } });
+      const earlierPhoto = (!previous || !Object.hasOwn(previous.data as object, 'attachmentIds')) && !latest?.attachmentIds.length ? await db.askMessage.findFirst({ where: { sessionId: ctx.sessionId, role: 'user', attachmentIds: { isEmpty: false }, ...(previous ? { createdAt: { lte: previous.updatedAt } } : {}) }, orderBy: { sequence: 'desc' } }) : null;
+      const data = AskListingDraftDataSchema.parse({ title: null, category: null, mode: null, condition: null, quantity: null, description: null, ...(previous?.data as object ?? {}), ...args, ...(includePhotos === false ? { attachmentIds: [] } : latest?.attachmentIds.length ? { attachmentIds: latest.attachmentIds } : earlierPhoto ? { attachmentIds: earlierPhoto.attachmentIds } : {}) });
       const row = await db.askDraft.upsert({ where: { sessionId_kind: { sessionId: ctx.sessionId, kind: 'listing' } }, create: { sessionId: ctx.sessionId, kind: 'listing', data }, update: { data } });
-      const draft = AskListingDraftSchema.parse({ ...row, updatedAt: row.updatedAt.toISOString() });
+      const attachments = await db.askAttachment.findMany({ where: { sessionId: ctx.sessionId, id: { in: data.attachmentIds } } });
+      const draft = AskListingDraftSchema.parse({ ...row, attachments, updatedAt: row.updatedAt.toISOString() });
       return { result: { draft, publicationAvailable: Boolean(services.marketplace) }, parts: [{ kind: 'listing_draft', draft }] };
+    });
+    if (services.marketplace) this.add('prepare_publish_listing', 'Prepare publication of the current complete private draft using the caller’s saved Profile pickup location. Ask user to choose saved location first. Requires confirmed condition, quantity, offering and maximum loan days for lending. Preserves draft photos. Creates a confirmation card only, never publishes until user presses Confirm. Custom pickup details use the secure draft form.', z.strictObject({ useSavedLocation: z.literal(true) }), async (_args, ctx) => {
+      const row = await db.askDraft.findUnique({ where: { sessionId_kind: { sessionId: ctx.sessionId, kind: 'listing' } } });
+      if (!row) throw new HttpError('VALIDATION_FAILED', 'Prepare a listing draft first');
+      const draft = AskListingDraftDataSchema.parse(row.data);
+      if (!Object.hasOwn(row.data as object, 'attachmentIds')) draft.attachmentIds = (await db.askMessage.findFirst({ where: { sessionId: ctx.sessionId, role: 'user', attachmentIds: { isEmpty: false }, createdAt: { lte: row.updatedAt } }, orderBy: { sequence: 'desc' } }))?.attachmentIds.slice(0, 2) ?? [];
+      if (!draft.title || !draft.category || !draft.mode || !draft.condition || !draft.quantity || draft.description === null || (draft.mode === 'lend' && !draft.maxLoanDays)) throw new HttpError('VALIDATION_FAILED', 'Ask for missing listing facts before preparing publication');
+      const user = await db.user.findUniqueOrThrow({ where: { id: ctx.userId } });
+      if (user.homeLat === null || user.homeLng === null || !user.areaLabel) throw new HttpError('VALIDATION_FAILED', 'Set your pickup location in Profile or use the secure review form');
+      const action = MarketplaceActionSchema.parse({ operation: 'listing_publish', attachmentIds: draft.attachmentIds, body: { title: draft.title, category: draft.category, mode: draft.mode, condition: draft.condition, quantity: draft.quantity, description: draft.description, areaLabel: user.areaLabel, exactLocation: { lat: user.homeLat, lng: user.homeLng }, pickupInstructions: 'Message in the app to agree on a pickup meeting point.', collection: { method: 'owner_location', communityPointId: null }, lending: draft.mode === 'lend' ? { maxLoanDays: draft.maxLoanDays, depositRequired: false, notes: null } : null, appliance: draft.category === 'appliances' ? { workingStatus: 'unknown', brand: null, model: null, approxWeightKg: null, dimensionsCm: null, powerRequirement: null, access: { floorLevel: null, elevatorAvailable: null, requiresDismantling: null, requiresInstallation: null, suggestedHelpers: null, notes: null } } : null } });
+      return this.propose(ctx, { kind: 'marketplace', action }, `Publish ${draft.title} × ${draft.quantity}`.slice(0, 300));
     });
   }
 
@@ -135,7 +150,7 @@ export class AskTools {
       declaration: { name, description, parametersJsonSchema: json },
       execute: (args, ctx) => {
         const parsed = schema.safeParse(args);
-        if (!parsed.success) throw new HttpError('VALIDATION_FAILED', 'Assistant tool arguments are invalid');
+        if (!parsed.success) throw new HttpError('VALIDATION_FAILED', `Correct these tool fields: ${parsed.error.issues.slice(0, 3).map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; ')}`.slice(0, 600));
         return handler(parsed.data, ctx);
       },
     });

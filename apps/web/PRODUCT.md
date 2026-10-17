@@ -62,6 +62,11 @@ actions or neighbours' eligibility. Direct browsing and forms remain available.
 - Ask has private sessions/history, photos, listing drafts, typed action cards,
   confirmation/cancellation/recovery and streamed progress. Saved needs are
   independent of chat deletion.
+- Assistant replies stream live. New tasks ask one to four focused questions
+  for missing facts, with choices and editable answers. Complete follow-ups
+  avoid repeated questions. Photos preview before first send, stay attached to
+  their draft, and appear on publication review. Ask can prepare publication
+  using the saved Profile pickup area; the resident explicitly confirms it.
 - Ask reads a curated product guide for product terminology and workflows. Its
   account tool reads the caller's real roles/membership statuses without home
   coordinates or email. The neighbour label does not imply community membership.

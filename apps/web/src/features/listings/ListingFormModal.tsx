@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type ChangeEvent, type FormEvent } from 'react';
+import { useState, useRef, useEffect, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import { AI_LIMITS } from '@neighbourhood/shared';
 import { useAuth } from '../../auth/AuthProvider';
 import { getShareDraft, removeShareDraft, saveShareDraft } from './shareDraftStore';
@@ -20,8 +20,9 @@ import { createListing, updateListing, uploadListingPhoto } from './listingApi';
 interface ListingFormModalProps {
   inline?: boolean;
   existingListing?: ListingPublic | null;
-  initialDraft?: AskListingDraft['data'];
-  onPrepare?: (body: CreateListingBody) => Promise<void>;
+  initialDraft?: Partial<AskListingDraft['data']>;
+  onPrepare?: (body: CreateListingBody, photo?: File) => Promise<void>;
+  attachedPhotos?: ReactNode;
   pointInventory?: { itemId: string; pointId: string; areaLabel: string };
   existingPickupInstructions?: string;
   onClose: () => void;
@@ -54,6 +55,7 @@ export function ListingFormModal({
   existingListing,
   initialDraft,
   onPrepare,
+  attachedPhotos,
   pointInventory,
   existingPickupInstructions,
   onClose,
@@ -82,7 +84,7 @@ export function ListingFormModal({
   const [bestBefore,setBestBefore] = useState(restored?.bestBefore ?? existingListing?.bestBefore ?? '');
   const [applianceModel,setApplianceModel] = useState(restored?.applianceModel ?? existingListing?.appliance?.model ?? '');
   const [powerRequirement,setPowerRequirement] = useState(restored?.powerRequirement ?? existingListing?.appliance?.powerRequirement ?? '');
-  const [maxLoanDays, setMaxLoanDays] = useState<number>(restored?.maxLoanDays ?? existingListing?.lending?.maxLoanDays ?? 7);
+  const [maxLoanDays, setMaxLoanDays] = useState<number>(restored?.maxLoanDays ?? existingListing?.lending?.maxLoanDays ?? initialDraft?.maxLoanDays ?? 7);
 
   // Appliance specifics
   const [applianceStatus, setApplianceStatus] = useState<'working' | 'partially_working' | 'not_working' | 'unknown'>(
@@ -217,8 +219,7 @@ export function ListingFormModal({
         };
 
         if (onPrepare) {
-          if (photoFile) throw new Error('Attach photos in Ask before preparing publication.');
-          await onPrepare(payload);
+          await onPrepare(payload, photoFile ?? undefined);
           onSuccess();
           return;
         }
@@ -447,6 +448,7 @@ id="listing-field-6"               rows={2}
           </div>
 
           {/* Photo Upload Picker */}
+          {attachedPhotos}
           <div>
             <label className="block text-sm font-medium text-stone-800" htmlFor="listing-field-7">Item Photo</label>
 <input
@@ -455,7 +457,7 @@ id="listing-field-7"               type="file"
               onChange={handlePhotoSelect}
               className="mt-1 block w-full text-sm text-stone-600 file:mr-3 file:rounded-xl file:border-0 file:bg-stone-100 file:px-3 file:py-2 file:text-sm file:font-semibold hover:file:bg-stone-200"
             />
-            <p className="mt-1 text-sm text-stone-600">JPEG, PNG or WebP, up to 4 MB. {onPrepare ? 'Attach photos in Ask before preparing this listing.' : 'Choose a clear photo of the actual item.'}</p>
+            <p className="mt-1 text-sm text-stone-600">JPEG, PNG or WebP, up to 4 MB. {onPrepare ? 'Included draft photos stay attached. You can add a photo here before review.' : 'Choose a clear photo of the actual item.'}</p>
             {photoPreview && (
               <div className="mt-2 flex items-center gap-2">
                 <img src={photoPreview} alt="Preview" className="h-16 w-16 rounded-xl object-cover ring-1 ring-stone-300" />

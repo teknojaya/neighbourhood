@@ -5,7 +5,7 @@ import type { Content, Part } from '@google/genai';
 import {
   ASK_LIMITS, AskActionPayloadSchema, AskActionSchema, AskMessageSchema, DomainError,
   AskPartSchema, AskSessionDetailSchema, AskListingDraftDataSchema,
-  type AskSendBody, type AskPart, type AskAction, type NeedsExtractionSchema,
+  type AskSendBody, type AskPart, type AskAction, type AskStreamEvent, type ListingPublic, type NeedsExtractionSchema,
 } from '@neighbourhood/shared';
 import { z } from 'zod';
 import type { Prisma, Db, Tx } from '../../lib/db.js';
@@ -66,24 +66,36 @@ export class PrismaAskService {
       this.db.askAction.findMany({ where: { sessionId } }),
       this.db.askDraft.findMany({ where: { sessionId } }),
       this.db.askRun.findFirst({ where: { sessionId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] }),
-      this.db.askMessage.findMany({ where: { sessionId, attachmentIds: { isEmpty: false } }, select: { attachmentIds: true } }),
+      this.db.askMessage.findMany({ where: { sessionId, attachmentIds: { isEmpty: false } }, select: { attachmentIds: true, createdAt: true }, orderBy: { sequence: 'desc' } }),
     ]);
-    const messages = page.map((row) => {
-      const parts = z.array(AskPartSchema).parse(row.parts).map((part): AskPart => {
+    const refreshed = new Map<string, Promise<ListingPublic | null>>();
+    const refreshListing = async (item: ListingPublic) => {
+      if (!this.services.marketplace) return { ...item, photos: item.photos.map(({ url: _url, ...photo }) => photo) };
+      if (!refreshed.has(item.id)) refreshed.set(item.id, this.services.marketplace.listings.getListingDetail(userId, item.id).then(result => result.listing).catch(err => { if (knownError(err)?.code === 'NOT_FOUND' || knownError(err)?.code === 'FORBIDDEN') return null; throw err; }));
+      const current = await refreshed.get(item.id)!;
+      return current ? { ...item, photos: current.photos } : { ...item, photos: [] };
+    };
+    const messages = await Promise.all(page.map(async (row) => {
+      const parts = await Promise.all(z.array(AskPartSchema).parse(row.parts).map(async (part): Promise<AskPart> => {
+        if (part.kind === 'listings') return { ...part, items: await Promise.all(part.items.map(refreshListing)), ...(part.search ? { search: { ...part.search, fartherItems: await Promise.all(part.search.fartherItems.map(refreshListing)) } } : {}) };
+        if (part.kind === 'matches') return { ...part, items: await Promise.all(part.items.map(async item => ({ ...item, listing: await refreshListing(item.listing) }))) };
         if (part.kind === 'action') {
           const current = actions.find((a) => a.id === part.action.id);
           return current ? { kind: 'action', action: actionDto(current) } : part;
         }
         if (part.kind === 'listing_draft') {
           const current = drafts.find((d) => d.id === part.draft.id);
-          return current ? { ...part, draft: { id: current.id, data: AskListingDraftDataSchema.parse(current.data), updatedAt: current.updatedAt.toISOString() } } : part;
+          if (!current) return part;
+          const data = AskListingDraftDataSchema.parse(current.data);
+          if (!Object.hasOwn(current.data as object, 'attachmentIds')) data.attachmentIds = photoMessages.find(message => message.createdAt <= current.updatedAt)?.attachmentIds.slice(0, 2) ?? [];
+          return { ...part, draft: { id: current.id, data, attachments: attachments.filter(a => data.attachmentIds.includes(a.id)).map(attachmentDto), updatedAt: current.updatedAt.toISOString() } };
         }
         return part;
-      });
+      }));
       return AskMessageSchema.parse({ ...row, parts, attachments: row.attachmentIds.flatMap((id) => {
         const a = attachments.find((a) => a.id === id); return a ? [attachmentDto(a)] : [];
       }), createdAt: row.createdAt.toISOString() });
-    });
+    }));
     const usedPhotos = new Set(photoMessages.flatMap((m) => m.attachmentIds));
     return AskSessionDetailSchema.parse({ session: sessionDto(session), messages: { items: messages, beforeSequence: rows.length > 30 ? page[0]!.sequence : null }, latestRun: latestRun ? runDto(latestRun) : null,
       pendingAttachments: attachments.filter((a) => !usedPhotos.has(a.id)).map(attachmentDto) });
@@ -93,7 +105,7 @@ export class PrismaAskService {
     return this.db.askRun.updateMany({ where: { sessionId, status: 'running', startedAt: { lt: new Date(Date.now() - LEASE_MS) } }, data: { status: 'failed', errorCode: 'AI_TIMEOUT' } });
   }
 
-  async send(userId: string, sessionId: string, body: AskSendBody) {
+  async send(userId: string, sessionId: string, body: AskSendBody, onEvent?: (event: AskStreamEvent) => void) {
     if (!this.model) throw new HttpError('AI_NOT_CONFIGURED', 'The assistant is not configured');
     const requestHash = createHash('sha256').update(JSON.stringify({ text: body.text, attachmentIds: body.attachmentIds })).digest('hex');
     const claim = await this.db.$transaction(async (tx) => {
@@ -120,9 +132,14 @@ export class PrismaAskService {
       const run = await tx.askRun.create({ data: { sessionId, clientMessageId: body.clientMessageId, requestHash } });
       return { run, execute: true };
     });
-    if (!claim.execute) return runDto(claim.run);
+    if (!claim.execute) { const run = runDto(claim.run); onEvent?.({ type: 'done', run }); return run; }
 
     const { run } = claim;
+    onEvent?.({ type: 'run', run: runDto(run) });
+    const progress = async (data: { progress: 'thinking' | 'searching' | 'reading' | 'preparing' | 'answering'; partialText: string }) => {
+      const changed = await this.db.askRun.updateMany({ where: { id: run.id, attemptId: run.attemptId, status: 'running' }, data });
+      if (changed.count) onEvent?.({ type: 'run', run: runDto({ ...run, ...data }) });
+    };
     const controller = new AbortController();
     this.controllers.set(run.attemptId, controller);
     const signal = AbortSignal.any([AbortSignal.timeout(ASK_LIMITS.turnMs), controller.signal]);
@@ -133,9 +150,11 @@ export class PrismaAskService {
       let finalText = '';
       for (let round = 0; round < ASK_LIMITS.modelRounds; round++) {
         signal.throwIfAborted();
-        const output = await this.model.generate(contents, this.tools.declarations(), signal, async text => { await this.db.askRun.updateMany({ where: { id: run.id, attemptId: run.attemptId, status: 'running' }, data: { progress: 'answering', partialText: text } }); });
+        const output = await this.model.generate(contents, this.tools.declarations(), signal, text => progress({ progress: 'answering', partialText: text }));
         signal.throwIfAborted();
-        const functionParts = output.parts?.filter((p) => p.functionCall) ?? [];
+        const proposedCalls = output.parts?.filter((p) => p.functionCall) ?? [];
+        // A clarification never runs alongside the requested marketplace operation.
+        const functionParts = proposedCalls.some(part => part.functionCall?.name === 'ask_questions') ? proposedCalls.filter(part => part.functionCall?.name === 'ask_questions').slice(0, 1) : proposedCalls;
         if (!functionParts.length) {
           finalText = output.parts?.filter((p) => !p.thought).map((p) => p.text ?? '').join('').trim().slice(0, 8000) ?? '';
           if (!finalText && !cards.length) throw new HttpError('AI_INVALID_OUTPUT', 'The assistant returned an empty reply');
@@ -148,8 +167,8 @@ export class PrismaAskService {
         for (const part of functionParts) {
           calls++;
           const call = part.functionCall!;
-          const progress = call.name === 'search_listings' ? 'searching' : call.name?.startsWith('prepare_') || call.name === 'draft_listing' ? 'preparing' : 'reading';
-          await this.db.askRun.updateMany({ where: { id: run.id, attemptId: run.attemptId, status: 'running' }, data: { progress, partialText: '' } });
+          const state = call.name === 'search_listings' ? 'searching' : call.name?.startsWith('prepare_') || call.name === 'draft_listing' || call.name === 'ask_questions' ? 'preparing' : 'reading';
+          await progress({ progress: state, partialText: '' });
           let result: unknown;
           try {
             const executed = await this.tools.execute(call.name ?? '', call.args ?? {}, { userId, sessionId, runId: run.id, attemptId: run.attemptId, signal });
@@ -168,6 +187,8 @@ export class PrismaAskService {
           results.push({ functionResponse: { name: call.name, ...(call.id ? { id: call.id } : {}), response } });
         }
         contents.push({ role: 'user', parts: results });
+        // A question card hands control to the resident; do not process their answer in this turn.
+        if (cards.some(card => card.kind === 'questions')) { finalText = 'Before I continue:'; break; }
       }
       if (!finalText && !cards.length) throw new HttpError('AI_INVALID_OUTPUT', 'The assistant reached its turn limit');
       await this.db.$transaction(async (tx) => {
@@ -184,7 +205,9 @@ export class PrismaAskService {
       if (failed.count) await this.db.askAction.updateMany({ where: { runId: run.id, status: 'pending' }, data: { status: 'cancelled' } });
     } finally { this.controllers.delete(run.attemptId); }
     const current = await this.db.askRun.findUnique({ where: { id: run.id } });
-    return runDto(current ?? { ...run, status: 'cancelled', errorCode: null });
+    const completed = runDto(current ?? { ...run, status: 'cancelled', errorCode: null });
+    onEvent?.({ type: 'done', run: completed });
+    return completed;
   }
 
   async stop(userId: string, sessionId: string) {
@@ -228,7 +251,7 @@ export class PrismaAskService {
 
   async upload(userId: string, sessionId: string, bytes: Buffer, mimeType: string, uploadKey: string = randomUUID()) {
     await this.owned(userId, sessionId);
-    if (!this.images) throw new HttpError('AUTH_NOT_CONFIGURED', 'Image storage is not configured');
+    if (!this.images) throw new HttpError('STORAGE_UNAVAILABLE', 'Photo storage is unavailable. Try again shortly.');
     const sourceHash = createHash('sha256').update(mimeType).update(bytes).digest('hex');
     bytes = await normalizeImage(bytes, mimeType);
     mimeType = 'image/webp';
@@ -251,7 +274,7 @@ export class PrismaAskService {
     } catch (err) {
       try { if (await this.db.askAttachment.count({ where: { storagePath: path } }) === 0) await this.images.delete(path); } catch { logger.warn('ask_upload_cleanup_failed', { attachmentId: id }); }
       if (err instanceof HttpError) throw err;
-      throw new HttpError('AUTH_NOT_CONFIGURED', 'Image storage is unavailable');
+      throw new HttpError('STORAGE_UNAVAILABLE', 'Photo storage is unavailable. Try again shortly.');
     }
   }
 
@@ -355,15 +378,18 @@ export class PrismaAskService {
     const payload = AskActionPayloadSchema.parse(claim.row.payload);
     const key = `ask_${actionId}_${revision}`;
     let receipt: { message: string; link: string | null };
+    let publicationStarted = false;
     try {
       switch (payload.kind) {
         case 'marketplace': {
           if (!this.services.marketplace) throw new HttpError('CONFLICT', 'Marketplace service unavailable');
+          const publicationPhotos = payload.action.operation === 'listing_publish' ? await Promise.all(payload.action.attachmentIds.map(id => this.image(userId, row.sessionId, id))) : [];
+          publicationStarted = payload.action.operation === 'listing_publish';
           receipt = await executeMarketplace(this.db, this.services.marketplace, userId, key, payload.action);
           if (payload.action.operation === 'listing_publish' && payload.action.attachmentIds.length) {
             const listingId = receipt.link!.split('/').at(-1)!;
-            for (const attachmentId of payload.action.attachmentIds) {
-              const photo = await this.image(userId, row.sessionId, attachmentId);
+            for (const [index, attachmentId] of payload.action.attachmentIds.entries()) {
+              const photo = publicationPhotos[index]!;
               await this.services.marketplace.listings.uploadPhoto(userId, listingId, photo.bytes, photo.mimeType, `${key}_photo_${attachmentId}`);
             }
           }
@@ -390,7 +416,7 @@ export class PrismaAskService {
       // A definite domain rejection did not commit. Unknown failures keep the claim
       // immutable so recovery can replay the SAME domain idempotency key.
       const failure = knownError(err);
-      const definite = failure !== null && failure.status < 500 && !(payload.kind === 'marketplace' && payload.action.operation === 'listing_publish');
+      const definite = failure !== null && failure.status < 500 && !publicationStarted;
       await this.db.askAction.update({ where: { id: actionId }, data: { status: definite ? 'pending' : 'executing', errorCode: failure?.code ?? 'INTERNAL' } });
       if (failure) throw failure;
       throw new HttpError('INTERNAL', 'Check this action\'s status before retrying');

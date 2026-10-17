@@ -1,4 +1,5 @@
 import { Link } from 'react-router';
+import { useState } from 'react';
 import { MAX_RADIUS_KM, type AskPart, type ListingPublic } from '@neighbourhood/shared';
 import { ActionPill, Card } from '../../components/ui';
 
@@ -15,5 +16,6 @@ export function SearchListingCard({ part, onReply }: { part: SearchPart; onReply
   </Card>;
 }
 function SearchItem({ item }: { item: ListingPublic }) {
-  return <Link to={'/listings/' + item.id} className="flex min-h-16 gap-3 border-b border-stone-100 py-3">{item.photos[0]?.url && <img className="h-16 w-16 rounded-xl object-cover" src={item.photos[0].url} alt="" />}<div className="min-w-0"><strong className="break-words">{item.title}</strong><p className="text-sm">{item.mode === 'donate' ? `Free to keep · ${item.stock.total - item.stock.reserved - item.stock.collected} available` : 'Borrow & return · choose dates'}</p><p className="text-sm text-stone-600">{item.location.areaLabel}{item.location.distanceKm !== undefined ? ` · about ${item.location.distanceKm} km` : ''}</p></div></Link>;
+  const [broken, setBroken] = useState<string | null>(null); const photo = item.photos[0]?.url;
+  return <Link to={'/listings/' + item.id} className="flex min-h-16 gap-3 border-b border-stone-100 py-3">{photo && photo !== broken && <img className="h-16 w-16 rounded-xl object-cover" src={photo} alt="" onError={() => setBroken(photo)} />}<div className="min-w-0"><strong className="break-words">{item.title}</strong><p className="text-sm">{item.mode === 'donate' ? `Free to keep · ${item.stock.total - item.stock.reserved - item.stock.collected} available` : 'Borrow & return · choose dates'}</p><p className="text-sm text-stone-600">{item.location.areaLabel}{item.location.distanceKm !== undefined ? ` · about ${item.location.distanceKm} km` : ''}</p></div></Link>;
 }

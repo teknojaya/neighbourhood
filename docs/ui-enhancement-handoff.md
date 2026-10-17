@@ -172,3 +172,43 @@ Verification completed:
 Existing bundle-size/PWA warnings and physical-device camera/keyboard limits
 remain. Production seeding is documented only; no production mutation, PR or
 deployment was performed.
+
+## Follow-up: conversational Ask, streaming and attached draft photos
+
+Ask now consumes a bearer-authenticated NDJSON POST stream from the existing
+message endpoint. Real Gemini partial text and tool progress update the reply;
+Stop, durable history and disconnected-turn recovery remain available. JSON
+clients remain compatible. New tasks clarify missing facts through one to four
+questions with choice pills and editable answers. Complete follow-ups and
+product explanations proceed directly. Question answers draft input and never
+authorize a marketplace write.
+
+Selected images preview immediately, including in a new chat. Upload errors keep
+the file with retry/remove controls and block sending an incomplete attachment.
+Drafts retain their own photo IDs through text-only updates. Legacy drafts can
+recover earlier same-chat photos. Both the draft and approval card preview the
+images; the secure form also supports included-photo selection and another
+upload. Historic listing/match cards renew signed photo URLs on loading.
+
+The agent can prepare publication from a complete draft and the chosen saved
+Profile pickup area. Confirm remains mandatory. Photo preflight happens before
+listing creation; confirmation copies private attachments with stable upload
+keys. Missing photos keep the action recoverable without publishing a bare
+listing. Saved coordinates are resolved server-side and stay out of model
+context. Custom private pickup instructions remain in the secure review form.
+
+`npm run check` passed 96 unit tests, type checking, lint and API/PWA builds.
+Subsequent targeted checks covered the final stream recovery and API changes.
+The 50 PostgreSQL tests cover early streaming, cancellation, question priority,
+legacy photos, approval/idempotency, missing-photo preflight and fresh history
+grants. The real Gemini/browser/bucket smoke passed first upload, questions,
+draft image, approval-only publication, reload and visible partial replies.
+The existing 19-capture refinement harness passed; 320/440px phone and 1440px
+desktop layouts were inspected. The single detector pass found no primary
+issues and one incumbent 11px listing-form hint advisory. No ignores were added.
+
+Local Storage was restarted and bundled seed photos restored. Existing bundle
+and PWA warnings remain; physical-device camera/keyboard behavior is not
+certified. No new migration or environment key, PR or deployment is needed.
+See [ask-agent-enhancement.md](ask-agent-enhancement.md) for the protocol, photo
+and approval details and the reproducible smoke command.

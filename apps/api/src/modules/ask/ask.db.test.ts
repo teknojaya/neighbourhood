@@ -67,6 +67,40 @@ afterAll(async () => {
 });
 
 describe('Ask sessions, agent tools and confirmed actions against PostgreSQL', () => {
+  it('streams authenticated text before completion and keeps JSON replay compatible', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const model = Object.assign(new FakeModel(), { generate: async (_contents: Content[], _tools: unknown, _signal: AbortSignal, onText?: (text: string) => Promise<void>) => { await onText?.('Sharing starts'); await gate; await onText?.('Sharing starts with your neighbours.'); return { role: 'model', parts: [{ text: 'Sharing starts with your neighbours.' }] } as Content; } });
+    const f = await fixture(model); const body = send('Explain sharing');
+    const server = f.app.listen(0, '127.0.0.1'); await new Promise<void>(resolve => server.once('listening', resolve));
+    const address = server.address(); if (!address || typeof address === 'string') throw new Error('Missing server');
+    try {
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/v1/ask/sessions/${f.session.id}/messages`, { method: 'POST', headers: { Authorization: bearer(f.user.firebaseUid), Accept: 'application/x-ndjson', 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      expect(response.headers.get('content-type')).toContain('application/x-ndjson');
+      const reader = response.body!.getReader(); const decoder = new TextDecoder(); let received = '';
+      while (!received.includes('Sharing starts')) received += decoder.decode((await reader.read()).value);
+      expect(received).toContain('"status":"running"'); expect(received).not.toContain('"type":"done"');
+      release(); for (;;) { const chunk = await reader.read(); if (chunk.done) break; received += decoder.decode(chunk.value); }
+      expect(received).toContain('"type":"done"'); expect(received).toContain('"status":"completed"');
+      const replay = await request(f.app).post(`/api/v1/ask/sessions/${f.session.id}/messages`).set('Authorization', bearer(f.user.firebaseUid)).send(body).expect(200);
+      expect(replay.body.status).toBe('completed'); expect((await f.ask.detail(f.user.id, f.session.id)).messages.items).toHaveLength(2);
+    } finally { release(); await new Promise<void>(resolve => server.close(() => resolve())); }
+  });
+
+  it('hands questions back without preparing an action and retains draft photos through text follow-ups', async () => {
+    const f = await fixture(new FakeModel((_contents, call) => call === 1 ? { role: 'model', parts: [...prepare('prepare_save_need', { extraction }).parts!, ...prepare('ask_questions', { questions: [{ question: 'Give away or lend?', options: ['Give away', 'Lend'] }, { question: 'What condition?', options: ['Good', 'Fair'] }] }).parts!] } : call === 2 ? prepare('draft_listing', { title: 'Cotton jackets', category: 'clothing', mode: 'donate', condition: 'good', quantity: 2, description: 'Two jackets.' }) : call === 4 ? prepare('draft_listing', { title: 'Two cotton jackets' }) : reply));
+    const photo = await f.ask.upload(f.user.id, f.session.id, await sharp({ create: { width: 3, height: 3, channels: 3, background: 'green' } }).png().toBuffer(), 'image/png');
+    await f.ask.send(f.user.id, f.session.id, { ...send('I want to share these'), attachmentIds: [photo.id] });
+    expect((await f.ask.detail(f.user.id, f.session.id)).messages.items.at(-1)?.parts[0]).toMatchObject({ kind: 'questions', questions: [{ question: 'Give away or lend?' }, { question: 'What condition?' }] });
+    expect(await db.askAction.count({ where: { sessionId: f.session.id } })).toBe(0); expect(f.model.calls).toHaveLength(1);
+    await f.ask.send(f.user.id, f.session.id, send('Give away two good jackets.'));
+    // A draft written by the older app has no explicit photo field.
+    await db.askDraft.updateMany({ where: { sessionId: f.session.id }, data: { data: { title: 'Cotton jackets', category: 'clothing', mode: 'donate', condition: 'good', quantity: 2, description: 'Two jackets.' } } });
+    expect((await f.ask.detail(f.user.id, f.session.id)).messages.items.flatMap(message => message.parts).find(part => part.kind === 'listing_draft')).toMatchObject({ draft: { attachments: [{ id: photo.id }] } });
+    await f.ask.send(f.user.id, f.session.id, send('Change the title.'));
+    const draft = (await f.ask.detail(f.user.id, f.session.id)).messages.items.flatMap(message => message.parts).find(part => part.kind === 'listing_draft');
+    expect(draft).toMatchObject({ kind: 'listing_draft', draft: { data: { title: 'Two cotton jackets', attachmentIds: [photo.id] }, attachments: [{ id: photo.id }] } });
+  });
   it('answers product concepts with a read-only guide and exposes only the caller’s safe account roles', async () => {
     const f = await fixture(new FakeModel((_contents, call) => call === 1 ? prepare('get_product_guide', { topic: 'roles' }) : reply));
     await f.ask.send(f.user.id, f.session.id, send('My account says neighbour. Am I a community member?'));

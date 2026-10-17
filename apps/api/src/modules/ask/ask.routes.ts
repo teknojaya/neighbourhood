@@ -27,7 +27,14 @@ export function askRouter(service: AskService): Router {
     res.json(await service.detail(authUser(req).userId, uuidParam(req, 'sessionId'), query.before));
   });
   r.post('/ask/sessions/:sessionId/messages', limiter, async (req, res) => {
-    res.json(await service.send(authUser(req).userId, uuidParam(req, 'sessionId'), parseBody(AskSendBodySchema, req)));
+    const body = parseBody(AskSendBodySchema, req);
+    if (!req.get('Accept')?.includes('application/x-ndjson')) { res.json(await service.send(authUser(req).userId, uuidParam(req, 'sessionId'), body)); return; }
+    const run = await service.send(authUser(req).userId, uuidParam(req, 'sessionId'), body, event => {
+      if (res.destroyed) return;
+      if (!res.headersSent) { res.set({ 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store, no-transform', 'X-Accel-Buffering': 'no' }); res.flushHeaders(); }
+      res.write(JSON.stringify(event) + '\n');
+    });
+    if (!res.destroyed) { if (!res.headersSent) res.json(run); else res.end(); }
   });
   r.post('/ask/sessions/:sessionId/stop', async (req, res) => { await service.stop(authUser(req).userId, uuidParam(req, 'sessionId')); res.sendStatus(204); });
   r.delete('/ask/sessions/:sessionId', async (req, res) => {

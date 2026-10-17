@@ -58,6 +58,45 @@ afterAll(async () => {
   await db.$disconnect();
 });
 describe('integrated marketplace against PostgreSQL', () => {
+  it('prepares publication with scoped draft photos, publishes only after approval and renews history photo grants', async () => {
+    const f = await fixture(); const files = new Map<string, Buffer>();
+    const images = { write: async (path: string, bytes: Buffer) => { files.set(path, bytes); }, read: async (path: string) => { const bytes = files.get(path); if (!bytes) throw new Error('missing object'); return bytes; }, delete: async (path: string) => { files.delete(path); } };
+    const services = { needs: f.needs, requests: f.requests, conversations: f.conversations, notifications: f.notifications, marketplace: { listings: f.listings, loans: f.loans, communities: f.communities } };
+    const ask = new PrismaAskService(db, null, images, services); const session = await ask.create(f.owner.id, randomUUID());
+    const photo = await ask.upload(f.owner.id, session.id, await sharp({ create: { width: 5, height: 5, channels: 3, background: 'blue' } }).png().toBuffer(), 'image/png');
+    await db.askMessage.create({ data: { sessionId: session.id, sequence: 0, role: 'user', text: 'Share my jackets', attachmentIds: [photo.id] } });
+    await db.askSession.update({ where: { id: session.id }, data: { nextSequence: 1 } });
+    const run = await db.askRun.create({ data: { sessionId: session.id, clientMessageId: randomUUID(), requestHash: 'a'.repeat(64) } });
+    const ctx = { userId: f.owner.id, sessionId: session.id, runId: run.id, attemptId: run.attemptId, signal: new AbortController().signal }; const tools = new AskTools(db, services);
+    await tools.execute('draft_listing', { title: 'Cotton jackets', category: 'clothing', mode: 'donate', quantity: 2, description: 'Two jackets.' }, ctx);
+    await expect(tools.execute('prepare_publish_listing', { useSavedLocation: true }, ctx)).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    await tools.execute('draft_listing', { condition: 'good' }, ctx);
+    const prepared = await tools.execute('prepare_publish_listing', { useSavedLocation: true }, ctx); const card = prepared.parts[0]; if (card?.kind !== 'action') throw new Error('Missing approval');
+    expect(card.action.payload).toMatchObject({ kind: 'marketplace', action: { operation: 'listing_publish', attachmentIds: [photo.id] } });
+    expect(JSON.stringify(prepared.result)).not.toMatch(/exactLocation|homeLat|homeLng|pickupInstructions/);
+    expect(await db.listing.count({ where: { ownerId: f.owner.id } })).toBe(0);
+    await expect(ask.confirm(f.outsider.id, card.action.id, 0)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    const [privatePath, privateBytes] = [...files.entries()][0]!; files.delete(privatePath);
+    await expect(ask.confirm(f.owner.id, card.action.id, 0)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(await db.listing.count({ where: { ownerId: f.owner.id } })).toBe(0); expect((await db.askAction.findUniqueOrThrow({ where: { id: card.action.id } })).status).toBe('pending'); files.set(privatePath, privateBytes);
+    const receipt = await ask.confirm(f.owner.id, card.action.id, 0); await ask.confirm(f.owner.id, card.action.id, 0);
+    const listingId = receipt.receipt!.link!.split('/').at(-1)!; const item = (await f.listings.getListingDetail(f.owner.id, listingId)).listing;
+    expect(item.photos).toHaveLength(1); expect(f.storage.files.size).toBe(1); expect(await db.listing.count({ where: { ownerId: f.owner.id } })).toBe(1);
+    const oldUrl = item.photos[0]!.url; f.storage.signedReadUrl = async path => '/renewed/' + path;
+    await db.askMessage.create({ data: { sessionId: session.id, sequence: 1, role: 'assistant', text: 'Your item', parts: [{ kind: 'listings', items: [item] }] } });
+    const refreshed = (await ask.detail(f.owner.id, session.id)).messages.items.at(-1)!.parts[0]; if (refreshed?.kind !== 'listings') throw new Error('Missing item');
+    expect(refreshed.items[0]!.photos[0]!.url).not.toBe(oldUrl); expect(refreshed.items[0]!.photos[0]!.url).toContain('/renewed/');
+    const lendingSession = await ask.create(f.owner.id, randomUUID());
+    const lendingPhoto = await ask.upload(f.owner.id, lendingSession.id, privateBytes, 'image/webp');
+    await db.askMessage.create({ data: { sessionId: lendingSession.id, sequence: 0, role: 'user', text: 'Lend one tool kit for up to seven days', attachmentIds: [lendingPhoto.id] } });
+    const lendingRun = await db.askRun.create({ data: { sessionId: lendingSession.id, clientMessageId: randomUUID(), requestHash: 'b'.repeat(64) } });
+    const lendingCtx = { ...ctx, sessionId: lendingSession.id, runId: lendingRun.id, attemptId: lendingRun.attemptId };
+    await tools.execute('draft_listing', { title: 'Household tool kit', category: 'household', mode: 'lend', quantity: 1, condition: 'good', description: 'Return all pieces.', maxLoanDays: 7 }, lendingCtx);
+    const lendingProposal = (await tools.execute('prepare_publish_listing', { useSavedLocation: true }, lendingCtx)).parts[0]; if (lendingProposal?.kind !== 'action') throw new Error('Missing lending approval');
+    const lendingReceipt = await ask.confirm(f.owner.id, lendingProposal.action.id, 0);
+    const lending = (await f.listings.getListingDetail(f.owner.id, lendingReceipt.receipt!.link!.split('/').at(-1)!)).listing;
+    expect(lending).toMatchObject({ mode: 'lend', stock: { total: 1 }, lending: { maxLoanDays: 7 }, photos: [{ path: expect.any(String) }] });
+  });
   it('persists manual radii and distinguishes nearby, farther and absent search results without leaking exact locations', async () => {
     const f = await fixture();
     await request(f.app).put('/api/v1/me/profile').set('Authorization', bearer(f.neighbour.firebaseUid)).send({ displayName: 'Raka', areaLabel: 'Test neighbourhood', homeLocation: body().exactLocation, searchRadiusKm: 7, preferredLanguage: 'en' }).expect(200);

@@ -3,8 +3,8 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { Link, useSearchParams } from 'react-router';
 import { z } from 'zod';
 import {
-  AI_LIMITS, ASK_LIMITS, ApiRoutes, AskAttachmentSchema, AskRunSchema, AskSessionSchema,
-  AskSessionDetailSchema, AskSessionPageSchema, AskStatusSchema, type AskMessage, type AskSendBody,
+  AI_LIMITS, ASK_LIMITS, ApiRoutes, AskAttachmentSchema, AskSessionSchema,
+  AskSessionDetailSchema, AskSessionPageSchema, AskStatusSchema, type AskAttachment, type AskRun, type AskMessage, type AskSendBody,
 } from '@neighbourhood/shared';
 import { ActionPill, Alert, Button, Dialog, pillActionClass, Skeleton } from '../../components/ui';
 import { BookmarkIcon, BoxIcon, CloseIcon, HistoryIcon, PlusIcon, SearchIcon, SendIcon, SparkIcon, TrashIcon } from '../../components/icons';
@@ -16,6 +16,7 @@ import { useOnline } from '../../lib/useOnline';
 import { featureError } from '../activity/feature-errors';
 import { AskCard, PrivatePhoto } from './AskCards';
 import { createRetryKey } from '../activity/retry-key';
+import { streamAsk } from '../../lib/askStream';
 
 export function AskPage() {
   const [params, setParams] = useSearchParams();
@@ -70,12 +71,29 @@ function AskChat({ sessionId, ensureSession, available, imagesAvailable, onDelet
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const historyRef = useRef<HTMLDivElement>(null);
   const firstHistory = useRef(false);
+  const followReply = useRef(false);
   const photoRetry = useRef(createRetryKey());
+  const streamController = useRef<AbortController | null>(null);
+  const [liveRun, setLiveRun] = useState<AskRun | null>(null);
+  const [connected, setConnected] = useState(false);
+  const [localPhotos, setLocalPhotos] = useState<AskAttachment[]>([]);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [optimistic, setOptimistic] = useState<{ body: AskSendBody; attachments: AskAttachment[] } | null>(null);
+  useEffect(() => { const url = uploadFile ? URL.createObjectURL(uploadFile) : null; setPreviewUrl(url); return () => { if (url) URL.revokeObjectURL(url); }; }, [uploadFile]);
+  useEffect(() => () => streamController.current?.abort(), []);
   const send = useMutation({
-    mutationFn: async (body: AskSendBody) => { const id = await ensureSession(); return api(`${ApiRoutes.ask}/sessions/${id}/messages`, { method: 'POST', body, schema: AskRunSchema }); },
-    onMutate: () => { void queryClient.invalidateQueries({ queryKey: ['ask-detail', sessionId] }); },
-    onSuccess: (run) => {
+    mutationFn: async (body: AskSendBody) => {
+      const id = await ensureSession(); const controller = new AbortController(); streamController.current = controller; setConnected(true);
+      let first = true;
+      try { return await streamAsk(`${ApiRoutes.ask}/sessions/${id}/messages`, body, run => { setLiveRun(run); if (first) { first = false; void queryClient.invalidateQueries({ queryKey: ['ask-detail', id] }); } }, controller.signal); }
+      finally { setConnected(false); }
+    },
+    onMutate: body => { followReply.current = true; setLiveRun(null); setOptimistic({ body, attachments: photos.filter(photo => body.attachmentIds.includes(photo.id)) }); },
+    onSuccess: async (run, body) => {
+      await queryClient.invalidateQueries({ queryKey: ['ask-detail'] });
       if (run.status !== 'failed') { setText(''); retry.current = null; }
+      setLocalPhotos(old => old.filter(photo => !body.attachmentIds.includes(photo.id))); setOptimistic(null); setLiveRun(null);
     },
     onSettled: () => { void queryClient.invalidateQueries({ queryKey: ['ask-detail'] }); void queryClient.invalidateQueries({ queryKey: ['ask-sessions'] }); },
   });
@@ -83,7 +101,7 @@ function AskChat({ sessionId, ensureSession, available, imagesAvailable, onDelet
     queryKey: ['ask-detail', sessionId],
     enabled: Boolean(sessionId),
     queryFn: ({ signal }) => api(`${ApiRoutes.ask}/sessions/${sessionId}`, { schema: AskSessionDetailSchema, signal }),
-    refetchInterval: (query) => send.isPending || query.state.data?.latestRun?.status === 'running' || query.state.data?.messages.items.some((m) => m.parts.some((p) => p.kind === 'action' && p.action.status === 'executing')) ? 2000 : false,
+    refetchInterval: (query) => (!connected && (send.isPending || query.state.data?.latestRun?.status === 'running')) || query.state.data?.messages.items.some((m) => m.parts.some((p) => p.kind === 'action' && p.action.status === 'executing')) ? 2000 : false,
   });
   const upload = useMutation({
     mutationFn: async (file: File) => {
@@ -92,12 +110,12 @@ function AskChat({ sessionId, ensureSession, available, imagesAvailable, onDelet
       return api(`${ApiRoutes.ask}/sessions/${id}/attachments`, { method: 'POST', binaryBody: file, schema: AskAttachmentSchema,
         idempotencyKey: photoRetry.current.forPayload({ name: file.name, size: file.size, type: file.type, modified: file.lastModified }) });
     },
-    onSuccess: () => photoRetry.current.clear(),
+    onSuccess: photo => { photoRetry.current.clear(); setLocalPhotos(old => [...old.filter(item => item.id !== photo.id), photo]); setUploadFile(null); },
     onSettled: () => void queryClient.invalidateQueries({ queryKey: ['ask-detail'] }),
   });
   const removePhoto = useMutation({
     mutationFn: (id: string) => api(`${ApiRoutes.ask}/sessions/${sessionId}/attachments/${id}`, { method: 'DELETE', schema: z.null() }),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['ask-detail', sessionId] }),
+    onSuccess: (_result, id) => { setLocalPhotos(old => old.filter(photo => photo.id !== id)); void queryClient.invalidateQueries({ queryKey: ['ask-detail', sessionId] }); },
   });
   const removeChat = useMutation({
     mutationFn: () => api(`${ApiRoutes.ask}/sessions/${sessionId}`, { method: 'DELETE', schema: z.null() }),
@@ -111,16 +129,20 @@ function AskChat({ sessionId, ensureSession, available, imagesAvailable, onDelet
     mutationFn: () => api(`${ApiRoutes.ask}/sessions/${sessionId}?before=${older?.before ?? detail.data?.messages.beforeSequence}`, { schema: AskSessionDetailSchema }),
     onSuccess: (page) => setOlder((old) => ({ items: [...page.messages.items, ...(old?.items ?? [])], before: page.messages.beforeSequence })),
   });
-  const isRunning = send.isPending || detail.data?.latestRun?.status === 'running';
-  const photos = detail.data?.pendingAttachments ?? [];
+  const activeRun = connected ? liveRun ?? detail.data?.latestRun : detail.data?.latestRun ?? liveRun;
+  const isRunning = send.isPending || activeRun?.status === 'running';
+  const usedPhotos = new Set(detail.data?.messages.items.flatMap(message => message.attachments.map(photo => photo.id)) ?? []);
+  if (send.isPending) send.variables?.attachmentIds.forEach(id => usedPhotos.add(id));
+  const photos = [...new Map([...(detail.data?.pendingAttachments ?? []), ...localPhotos].filter(photo => !usedPhotos.has(photo.id)).map(photo => [photo.id, photo])).values()];
   const failedRun = detail.data?.latestRun?.status === 'failed' ? detail.data.latestRun : null;
   const messages = [...new Map([...(older?.items ?? []), ...(detail.data?.messages.items ?? [])].map((m) => [m.id, m])).values()].sort((a, b) => a.sequence - b.sequence);
   useEffect(() => {
     const box = historyRef.current;
     if (!box || !detail.data) return;
-    if (!firstHistory.current || box.scrollHeight - box.scrollTop - box.clientHeight < 160) box.scrollTop = box.scrollHeight;
+    if (followReply.current || !firstHistory.current || box.scrollHeight - box.scrollTop - box.clientHeight < 160) box.scrollTop = box.scrollHeight;
+    if (!isRunning) followReply.current = false;
     firstHistory.current = true;
-  }, [messages.length, detail.data?.latestRun?.partialText, detail.data]);
+  }, [messages.length, activeRun?.partialText, detail.data, optimistic, isRunning]);
   const completedClientId = detail.data?.latestRun?.status === 'completed' ? detail.data.latestRun.clientMessageId : null;
   const resetSend = send.reset;
   useEffect(() => {
@@ -133,7 +155,7 @@ function AskChat({ sessionId, ensureSession, available, imagesAvailable, onDelet
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (!online || !available || isRunning || upload.isPending || removePhoto.isPending || (!text.trim() && !photos.length)) return;
+    if (!online || !available || isRunning || upload.isPending || uploadFile || removePhoto.isPending || (!text.trim() && !photos.length)) return;
     const payload = { text: text.trim(), attachmentIds: photos.slice(0, ASK_LIMITS.attachmentsPerMessage).map((a) => a.id) };
     const signature = JSON.stringify(payload);
     if (retry.current?.signature !== signature) retry.current = { signature, body: { ...payload, clientMessageId: crypto.randomUUID() } };
@@ -157,28 +179,31 @@ function AskChat({ sessionId, ensureSession, available, imagesAvailable, onDelet
     <div ref={historyRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1" aria-label={t('ask.history')}>
       {(older ? older.before !== null : detail.data?.messages.beforeSequence != null) && <Button type="button" variant="secondary" disabled={loadOlder.isPending} onClick={() => loadOlder.mutate()}>{t('ask.older')}</Button>}
       {loadOlder.isError && <Alert tone="error">{featureError(loadOlder.error)}</Alert>}
-      {messages.length === 0 && <div className="mx-auto max-w-md space-y-4 py-5 sm:py-10"><div className="text-brand-700"><SparkIcon /></div><h2 className="text-2xl font-bold tracking-tight">A little help from your neighbourhood.</h2><p className="text-sm leading-relaxed text-stone-600">Find something you need, give an item a new home, or arrange a loan. You review every change before it happens.</p><div className="flex flex-wrap gap-2">{(['find', 'donate', 'borrow'] as const).map(kind => <ActionPill key={kind} type="button" onClick={() => { setText(t(`ask.prompt.${kind}`)); inputRef.current?.focus(); }}>{kind === 'find' ? <SearchIcon /> : kind === 'donate' ? <PlusIcon /> : <BoxIcon />}{t(`ask.starter.${kind}`)}</ActionPill>)}</div></div>}
+      {messages.length === 0 && !optimistic && <div className="mx-auto max-w-md space-y-4 py-5 sm:py-10"><div className="text-brand-700"><SparkIcon /></div><h2 className="text-2xl font-bold tracking-tight">A little help from your neighbourhood.</h2><p className="text-sm leading-relaxed text-stone-600">Find something you need, give an item a new home, or arrange a loan. You review every change before it happens.</p><div className="flex flex-wrap gap-2">{(['find', 'donate', 'borrow'] as const).map(kind => <ActionPill key={kind} type="button" onClick={() => { setText(t(`ask.prompt.${kind}`)); inputRef.current?.focus(); }}>{kind === 'find' ? <SearchIcon /> : kind === 'donate' ? <PlusIcon /> : <BoxIcon />}{t(`ask.starter.${kind}`)}</ActionPill>)}</div></div>}
       {messages.map((message) => <article key={message.id} className={`space-y-3 ${message.role === 'user' ? 'ml-6 rounded-2xl bg-brand-50 p-3' : 'mr-2'}`}>
         <p className="text-xs font-semibold text-stone-500">{message.role === 'user' ? t('ask.you') : t('ask.assistant')}</p>
         {sessionId && message.attachments.length > 0 && <div className="flex flex-wrap gap-2">{message.attachments.map((attachment) => <PrivatePhoto key={attachment.id} sessionId={sessionId} attachment={attachment} />)}</div>}
         {message.text && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.text}</p>}
-        {sessionId && message.parts.map((part, index) => <AskCard key={index} part={part} sessionId={sessionId} onReply={reply => { setText(reply); inputRef.current?.focus(); }} onEditDraft={() => { setText(t('ask.editDraftPrompt')); inputRef.current?.focus(); }} />)}
+        {sessionId && message.parts.map((part, index) => <AskCard key={index} part={part} sessionId={sessionId} disabled={isRunning} onReply={reply => { setText(reply); inputRef.current?.focus(); }} onEditDraft={() => { setText(t('ask.editDraftPrompt')); inputRef.current?.focus(); }} />)}
       </article>)}
-      {isRunning && <Alert><p role="status">{({ thinking: 'Thinking…', searching: 'Looking nearby…', reading: 'Checking your activity…', preparing: 'Preparing a review card…', answering: 'Writing a reply…' } as const)[detail.data?.latestRun?.progress ?? 'thinking']}</p>{detail.data?.latestRun?.partialText && <p className="mt-2 whitespace-pre-wrap break-words text-sm">{detail.data.latestRun.partialText}</p>}</Alert>}
+      {optimistic && detail.data?.latestRun?.clientMessageId !== optimistic.body.clientMessageId && <article className="ml-6 space-y-3 rounded-2xl bg-brand-50 p-3"><p className="text-xs font-semibold text-stone-500">{t('ask.you')}</p>{sessionId && <div className="flex flex-wrap gap-2">{optimistic.attachments.map(photo => <PrivatePhoto key={photo.id} sessionId={sessionId} attachment={photo} />)}</div>}<p className="whitespace-pre-wrap break-words text-sm">{optimistic.body.text}</p></article>}
+      {isRunning && <div className="mr-2 space-y-2" aria-label="Assistant response"><p role="status" className="text-sm text-brand-800">{({ thinking: 'Thinking…', searching: 'Looking nearby…', reading: 'Checking your activity…', preparing: 'Preparing your next step…', answering: 'Writing a reply…' } as const)[activeRun?.progress ?? 'thinking']}</p>{activeRun?.partialText && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{activeRun.partialText}</p>}</div>}
       {failedRun && <Alert tone="error"><p>{featureError(new ApiError(failedRun.errorCode ?? 'INTERNAL', '', 0))}</p><Button type="button" variant="secondary" disabled={isRunning || !online || !available} onClick={retryTurn}>{t('common.retry')}</Button></Alert>}
       {send.isError && <Alert tone="error">{featureError(send.error)}</Alert>}
       {stop.isError && <Alert tone="error">{featureError(stop.error)}</Alert>}
     </div>
     <form onSubmit={submit} className="composer space-y-2">
+      {previewUrl && <img src={previewUrl} alt="Selected photo preview" className="h-28 w-28 rounded-xl object-cover" />}
       {sessionId && photos.length > 0 && <div className="flex flex-wrap gap-2">{photos.map((attachment) => <div key={attachment.id} className="space-y-1"><PrivatePhoto sessionId={sessionId} attachment={attachment} /><Button type="button" variant="ghost" disabled={isRunning || removePhoto.isPending || !online} onClick={() => removePhoto.mutate(attachment.id)}>{t('ask.removePhoto')}</Button></div>)}</div>}
       {upload.isError && <Alert tone="error">{featureError(upload.error)}</Alert>}
+      {upload.isError && uploadFile && <div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" disabled={!online || upload.isPending} onClick={() => upload.mutate(uploadFile)}>Retry photo upload</Button><Button type="button" variant="ghost" onClick={() => { setUploadFile(null); upload.reset(); photoRetry.current.clear(); }}>Remove selected photo</Button></div>}
       {removePhoto.isError && <Alert tone="error">{featureError(removePhoto.error)}</Alert>}
       <label className="sr-only" htmlFor="ask-message">{t('ask.message')}</label>
       <div className="flex items-end gap-2">
-        {imagesAvailable && <AttachmentButton uploading={upload.isPending} disabled={!online || isRunning || upload.isPending || photos.length >= ASK_LIMITS.attachmentsPerMessage} onFile={file => upload.mutate(file)} />}
+        {imagesAvailable && <AttachmentButton uploading={upload.isPending} disabled={!online || isRunning || upload.isPending || photos.length >= ASK_LIMITS.attachmentsPerMessage} onFile={file => { if ((AI_LIMITS.imageMimeTypes as readonly string[]).includes(file.type) && file.size <= AI_LIMITS.imageMaxBytes) setUploadFile(file); upload.mutate(file); }} />}
         <textarea ref={inputRef} id="ask-message" value={text} onChange={(event) => setText(event.target.value)} maxLength={ASK_LIMITS.textChars} rows={2} placeholder={t('ask.placeholder')} disabled={isRunning} className="block min-w-0 flex-1 resize-none bg-white text-base disabled:bg-stone-100" />
         {isRunning ? <Button type="button" variant="secondary" disabled={!online || stop.isPending} onClick={() => stop.mutate()}>{t('ask.stop')}</Button>
-          : <button type="submit" aria-label={t('ask.send')} title={t('ask.send')} disabled={!available || !online || upload.isPending || removePhoto.isPending || (!text.trim() && photos.length === 0)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-700 text-white hover:bg-brand-800 disabled:bg-stone-200 disabled:text-stone-500"><SendIcon /></button>}
+          : <button type="submit" aria-label={t('ask.send')} title={t('ask.send')} disabled={!available || !online || upload.isPending || Boolean(uploadFile) || removePhoto.isPending || (!text.trim() && photos.length === 0)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-700 text-white hover:bg-brand-800 disabled:bg-stone-200 disabled:text-stone-500"><SendIcon /></button>}
       </div>
       {upload.isPending && <p role="status" className="text-sm text-brand-800">Uploading photo…</p>}
       <details className="text-xs text-stone-600"><summary className="cursor-pointer">{t('ask.privacySummary')}</summary><p className="pt-1">{t('ask.privacy')}</p></details>

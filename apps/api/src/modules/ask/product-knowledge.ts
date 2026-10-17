@@ -17,7 +17,7 @@ export const PRODUCT_GUIDE = {
     accountAnswers: 'Use my_account for the caller’s actual roles and membership statuses. Do not infer membership or permissions from the word neighbour, a display name, a community card, or an old answer.',
   },
   sharing: {
-    donate: 'Donate / Share on Home opens the direct listing form. Give away means free to keep. Choose category, condition, quantity, public area, optional photo, and private pickup instructions. Ask can prepare a listing draft; the secure form and explicit confirmation publish it.',
+    donate: 'Donate / Share on Home opens the direct listing form. Give away means free to keep. Ask clarifies missing facts with 1–4 questions and answer choices, then prepares a private draft with the selected chat photos. Ask can prepare publication using a complete draft and the saved Profile pickup location; the resident must press Confirm on the approval card. Custom private pickup details use the secure review form. Photos remain attached through text follow-ups and publication.',
     requests: 'Requesting a donation does not reserve stock immediately. Approval reserves the available quantity; rejected, cancelled or expired reservations release it. Collected means the in-person pickup was confirmed. Follow server allowedActions.',
     pickup: 'Public cards show an area label and approximate distance, not exact coordinates or pickup instructions. An authorized request/loan participant can view pickup details after approval. The recipient arranges their own transport and helpers.',
     appliances: 'Show working condition and any known weight, dimensions, floor, elevator, dismantling, installation and helpers. Unknown means not confirmed. A photo cannot prove those facts.',
@@ -47,6 +47,7 @@ export const PRODUCT_GUIDE = {
   chat: {
     ask: 'Ask is the private AI assistant. History opens past sessions; + New chat starts a fresh composer. A session is created by the first send or photo, not just opening the tab.',
     images: 'The + beside the composer opens Take photo or Photo library. Up to two JPEG/PNG/WebP images per message, each at most 4 MB. Images suggest a draft, not proven condition or quantity.',
+    replies: 'Replies stream live with thinking, reading, searching and preparation states. Stop cancels the active turn. After a dropped connection, reopen the session to recover durable history. Question choices draft an editable answer; they do not execute marketplace changes. Uploaded photos preview before sending and are attached to that same message.',
     neighbourMessages: 'Messages in the header are human neighbour conversations tied to authorized requests or loans. They are separate from AI chat history.',
     drafts: 'Unsent text and direct Share form drafts stay in account-scoped memory while navigating; refreshing or signing out clears them. Successful publication or explicit discard clears the Share draft.',
     confirmation: 'All proposed marketplace writes require the review card’s confirmation button. A chat message saying yes does not execute the action. Only a completed service receipt proves success.',

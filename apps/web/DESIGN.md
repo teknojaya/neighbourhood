@@ -270,6 +270,8 @@ Ask starts with a usable composer, one invitation and three starters; opening it
 
 The composer places a 44px round attachment `+` before the two-row textarea and a named round Send icon after it. The attachment control opens a native auto popover with Take photo and Photo library, plus file limits and an explicit close control. Escape and outside dismissal preserve native behavior. Session deletion is a named trash icon with confirmation. At short heights, the history region scrolls while the composer and navigation retain their own space.
 
+Selected photos preview while uploading and remain visible in the first sent message. Failed uploads retain retry/remove controls and block sending an incomplete attachment. Assistant text streams in the conversation with a concise status label and Stop control. Status updates do not announce every token. One to four clarification questions use fieldsets, labelled free-text answers and wrapping choice pills with visible selected states. Use these answers drafts an editable message. Draft and publication cards show their attached photos; publishing remains an explicit Confirm action after reviewing the actual fields.
+
 History and modal forms use the native dialog: centered, up to 36rem wide, one-rem viewport clearance, maximum height `calc(100dvh - 2rem)`, scrollable content and `2xl` corners. Opening locks body scroll; Escape triggers dismissal, and unmount restores prior focus. Inline Share preserves facts and the selected File in account-scoped memory through navigation, with explicit discard and origin-aware cancel; successful publication, refresh and sign-out clear the draft.
 
 ### Loading, empty and feedback

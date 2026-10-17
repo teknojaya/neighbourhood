@@ -51,10 +51,13 @@ export const AskListingDraftDataSchema = z.strictObject({
   title: z.string().trim().max(100).nullable(), category: ItemCategorySchema.nullable(),
   mode: ListingModeSchema.nullable(), condition: ItemConditionSchema.nullable(),
   quantity: z.number().int().min(1).max(1000).nullable(), description: z.string().max(2000).nullable(),
+  maxLoanDays: z.number().int().min(1).max(90).nullable().default(null),
+  attachmentIds: z.array(z.uuid()).max(2).default([]),
 });
-export const AskListingDraftSchema = z.object({ id: IdSchema, data: AskListingDraftDataSchema, updatedAt: IsoDateTimeSchema });
+export const AskListingDraftSchema = z.object({ id: IdSchema, data: AskListingDraftDataSchema, attachments: z.array(AskAttachmentSchema).max(2).default([]), updatedAt: IsoDateTimeSchema });
 export type AskListingDraft = z.infer<typeof AskListingDraftSchema>;
 export const AskPartSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('questions'), questions: z.array(z.object({ question: z.string().trim().min(1).max(240), options: z.array(z.string().trim().min(1).max(100)).max(6).default([]) })).min(1).max(4) }),
   z.object({ kind: z.literal('matches'), items: NeedMatchesSchema.shape.items }),
   z.object({ kind: z.literal('listings'), items: z.array(ListingPublicSchema), search: AskSearchScopeSchema.optional() }),
   z.object({ kind: z.literal('loans'), items: z.array(LoanSchema) }),
@@ -78,5 +81,10 @@ export type AskMessage = z.infer<typeof AskMessageSchema>;
 export const AskMessagePageSchema = z.object({ items: z.array(AskMessageSchema), beforeSequence: z.number().int().nullable() });
 export const AskRunSchema = z.object({ id: IdSchema, clientMessageId: z.uuid(), status: z.enum(['running', 'completed', 'failed', 'cancelled']), progress: z.enum(['thinking','searching','reading','preparing','answering']).default('thinking'), partialText: z.string().max(8000).default(''), errorCode: ApiErrorCodeSchema.nullable(), createdAt: IsoDateTimeSchema });
 export type AskRun = z.infer<typeof AskRunSchema>;
+export const AskStreamEventSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('run'), run: AskRunSchema }),
+  z.object({ type: z.literal('done'), run: AskRunSchema }),
+]);
+export type AskStreamEvent = z.infer<typeof AskStreamEventSchema>;
 export const AskSessionDetailSchema = z.object({ session: AskSessionSchema, messages: AskMessagePageSchema, latestRun: AskRunSchema.nullable(), pendingAttachments: z.array(AskAttachmentSchema) });
 export const AskStatusSchema = z.object({ available: z.boolean(), imagesAvailable: z.boolean() });

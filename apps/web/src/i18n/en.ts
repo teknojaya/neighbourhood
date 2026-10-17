@@ -256,6 +256,7 @@ export const en = {
   'error.OFFLINE': 'You are offline. Connect and try again.',
   'error.UNAUTHENTICATED': 'Your session expired. Please sign in again.',
   'error.AUTH_NOT_CONFIGURED': 'Sign-in is not configured on this server yet.',
+  'error.STORAGE_UNAVAILABLE': 'Photo storage is temporarily unavailable. Keep your photo and try again shortly.',
   'error.ACCOUNT_LINK_REQUIRED':
     'An account with this email already exists. Sign in with an email code first, then link Google from your profile.',
   'error.ACCOUNT_DISABLED': 'This account is disabled.',

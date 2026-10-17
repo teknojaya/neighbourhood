@@ -1,4 +1,5 @@
 import { SearchListingCard } from './SearchListingCard';
+import { QuestionCard } from './QuestionCard';
 import { PublishDraft } from './PublishDraft';
 import { PointDraft } from './PointDraft';
 import { MarketplacePreview } from './MarketplacePreview';
@@ -23,24 +24,27 @@ const marketplaceTitles = {
   notification_read: 'Mark this notification as read', profile_preferences: 'Update your preferences',
 };
 
-export function PrivatePhoto({ sessionId, attachment }: { sessionId: string; attachment: AskAttachment }) {
+export function PrivatePhoto({ sessionId, attachment }: { sessionId: string; attachment: Pick<AskAttachment, 'id'> }) {
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
     let objectUrl: string | null = null;
+    setUrl(null); setFailed(false);
     void privateImage(`${ApiRoutes.ask}/sessions/${sessionId}/attachments/${attachment.id}`, controller.signal).then((blob) => {
       if (controller.signal.aborted) return;
       objectUrl = URL.createObjectURL(blob); setUrl(objectUrl);
     }).catch(() => { if (!controller.signal.aborted) setFailed(true); });
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [sessionId, attachment.id]);
+  }, [sessionId, attachment.id, attempt]);
   return url ? <img src={url} alt={t('ask.photoAlt')} className="h-28 w-28 rounded-xl object-cover" />
-    : <span className="flex h-28 w-28 items-center justify-center rounded-xl bg-stone-100 p-2 text-xs">{failed ? t('ask.photoUnavailable') : t('common.loading')}</span>;
+    : <span className="flex h-28 w-28 flex-col items-center justify-center gap-1 rounded-xl bg-stone-100 p-2 text-xs">{failed ? t('ask.photoUnavailable') : t('common.loading')}{failed && <button type="button" className="min-h-11 text-brand-800 underline" onClick={() => setAttempt(value => value + 1)}>Retry photo</button>}</span>;
 }
 
-export function AskCard({ part, sessionId, onEditDraft, onReply }: { part: AskPart; sessionId: string; onEditDraft(): void; onReply(text: string): void }) {
+export function AskCard({ part, sessionId, onEditDraft, onReply, disabled = false }: { part: AskPart; sessionId: string; onEditDraft(): void; onReply(text: string): void; disabled?: boolean }) {
   switch (part.kind) {
+    case 'questions': return <QuestionCard part={part} onReply={onReply} disabled={disabled} />;
     case 'matches': return <Card className="space-y-3"><h3 className="font-semibold">Matches for your saved need</h3>{part.items.length === 0 && <p>No matches nearby yet.</p>}{part.items.map(item => <Link className="block border-t py-3" key={item.listing.id} to={'/listings/' + item.listing.id}><strong>{item.listing.title}</strong><p className="text-sm">{item.reason}</p>{item.missingInfo.map((info,i) => <p className="text-xs text-stone-600" key={i}>{info}</p>)}</Link>)}</Card>;
     case 'listings': return <SearchListingCard part={part} onReply={onReply} />;
     case 'loans': return <Card>{part.items.length === 0 && <p>No loans yet.</p>}{part.items.map(item => <Link className="block py-3" key={item.id} to={'/activity?loan=' + item.id}>{item.listingTitle} · {item.status}<p className="text-sm">{item.startDate} → {item.endDate}{item.overdue ? ' · Overdue' : ''}</p></Link>)}</Card>;
@@ -53,6 +57,7 @@ export function AskCard({ part, sessionId, onEditDraft, onReply }: { part: AskPa
     case 'action': return <ActionCard key={`${part.action.id}:${part.action.revision}:${part.action.status}`} action={part.action} sessionId={sessionId} />;
     case 'listing_draft': return <Card className="space-y-2">
       <h3 className="font-semibold">{t('ask.listingDraft')}</h3>
+      {part.draft.attachments.length > 0 && <div className="flex flex-wrap gap-2" aria-label="Draft photos">{part.draft.attachments.map(attachment => <PrivatePhoto key={attachment.id} sessionId={sessionId} attachment={attachment} />)}</div>}
       <p>{part.draft.data.title ?? t('ask.unknown')}</p>
       <p className="text-sm text-stone-600">{part.draft.data.category ? t(`category.${part.draft.data.category}`) : t('ask.unknown')} · {part.draft.data.mode ?? t('ask.unknown')}</p>
       <p className="text-sm">{part.draft.data.description}</p>
@@ -114,6 +119,7 @@ function ActionCard({ action, sessionId }: { action: AskAction; sessionId: strin
     <h3 className="font-semibold">{action.payload.kind === 'marketplace' ? marketplaceTitles[action.payload.action.operation] : t(`ask.action.${action.payload.kind}`)}</h3>
     <p className="break-words text-sm">{action.summary}</p>
     {action.payload.kind === 'marketplace' && <MarketplacePreview action={action.payload.action} />}
+    {action.payload.kind === 'marketplace' && action.payload.action.operation === 'listing_publish' && <div className="flex flex-wrap gap-2" aria-label="Photos to publish">{action.payload.action.attachmentIds.map(id => <PrivatePhoto key={id} sessionId={sessionId} attachment={{ id }} />)}</div>}
     {action.payload.kind === 'send_message' && <><blockquote className="whitespace-pre-wrap break-words rounded-xl bg-stone-50 p-3 text-sm">{action.payload.body}</blockquote><Link className="text-sm text-brand-800 underline" to={`/messages?conversation=${action.payload.conversationId}`}>{t('ask.openConversation')}</Link></>}
     {action.payload.kind === 'request_item' && <><p>{t('needs.quantity', { value: action.payload.body.quantity })}</p>{action.payload.body.message && <blockquote className="whitespace-pre-wrap break-words text-sm">{action.payload.body.message}</blockquote>}</>}
     {action.payload.kind === 'transition_request' && <div className="space-y-2 text-sm">

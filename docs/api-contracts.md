@@ -45,6 +45,17 @@ Important integration contracts:
 - `POST /ai/match-explanations`: `{ needId }`; candidates are server selected.
 - `POST /ask/sessions/:id/proposals`: `{ clientId, action }` with
   `MarketplaceActionSchema`; returns a stored review card, never executes.
+- `POST /ask/sessions/:id/messages`: existing JSON clients receive `AskRun`.
+  `Accept: application/x-ndjson` streams validated `{ type: "run" | "done", run }`
+  snapshots. Partial text replaces the prior snapshot. A disconnect does not
+  approve an action or implicitly resend the message; durable detail/stop and
+  idempotent client-message IDs remain the recovery path.
+- Ask `questions` parts contain one to four questions with choices and free-text
+  answers. Listing drafts add optional defaulted `maxLoanDays`, `attachmentIds`
+  and attachment metadata, preserving old history compatibility. Publication
+  tools prepare approval cards; only the confirm endpoint performs the write.
+  Historical listing/match photo URLs are renewed when detail is loaded.
+- `STORAGE_UNAVAILABLE` (503) identifies unavailable Ask upload storage.
 - `POST /ask/actions/:id/confirm`: `{ revision }`; repeat confirmation returns
   the same outcome. Cancel is separate. Stale listing edits are rejected.
 - `POST /listings/:id/photos`: raw JPEG/PNG/WebP with `Content-Type` and

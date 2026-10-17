@@ -67,6 +67,21 @@ afterAll(async () => {
 });
 
 describe('Ask sessions, agent tools and confirmed actions against PostgreSQL', () => {
+  it('answers product concepts with a read-only guide and exposes only the caller’s safe account roles', async () => {
+    const f = await fixture(new FakeModel((_contents, call) => call === 1 ? prepare('get_product_guide', { topic: 'roles' }) : reply));
+    await f.ask.send(f.user.id, f.session.id, send('My account says neighbour. Am I a community member?'));
+    const guide = f.model.calls[1]?.flatMap(c => c.parts ?? []).find(p => p.functionResponse)?.functionResponse?.response;
+    expect(JSON.stringify(guide)).toContain('may have no community memberships');
+    expect(await db.askAction.count({ where: { sessionId: f.session.id } })).toBe(0);
+    const other = await fixture();
+    await db.userRole.create({ data: { userId: other.user.id, role: 'staff' } });
+    await db.user.update({ where: { id: f.user.id }, data: { homeLat: -6.23456789, homeLng: 106.98765432, areaLabel: 'Public neighbourhood' } });
+    f.model.respond = (_contents, call) => call === 3 ? prepare('my_account', {}) : reply;
+    await f.ask.send(f.user.id, f.session.id, send('What is my current role?'));
+    const result = f.model.calls[3]?.at(-1)?.parts?.find(p => p.functionResponse)?.functionResponse?.response;
+    expect(result).toMatchObject({ result: { accountLabel: 'neighbour', platformRoles: [], memberships: [], searchLocationSet: true, publicArea: 'Public neighbourhood' } });
+    expect(JSON.stringify(result)).not.toMatch(/homeLat|homeLng|-6\.23456789|106\.98765432|email/);
+  });
   it('persists partial reply progress and prevents a stopped stream from committing a reply', async () => {
     let ready!: () => void, release!: () => void;
     const started = new Promise<void>(resolve => { ready = resolve; }); const gate = new Promise<void>(resolve => { release = resolve; });

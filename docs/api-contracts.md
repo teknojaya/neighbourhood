@@ -25,6 +25,12 @@ use cursor pagination where defined by the shared schema.
 Important integration contracts:
 
 - `GET /notifications/unread`: `{ messages, updates }` for the signed-in account only. Message counts exclude the viewer's own messages and respect each participant's read watermark. Update counts include all unread inbox entries, independent of pagination. No migration is required.
+- Ask read-only tools `get_product_guide({ topic })` and `my_account({})` are
+  internal model tools, not new public endpoints. Guide topics cover roles,
+  giving, borrowing, points, saved needs, location, chat and navigation.
+  `my_account` derives identity from the authenticated session and returns safe
+  caller roles/membership statuses/preferences and a location-set flag. It never
+  returns home coordinates, email or another resident's account data.
 
 - `POST /ai/listing-draft`: `{ sessionId, attachmentId, hint? }`; the API reads
   the caller's normalized session image. No arbitrary URL fetch.

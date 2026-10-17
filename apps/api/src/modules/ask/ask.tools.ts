@@ -14,6 +14,7 @@ import type { ConversationsService } from '../conversations/conversations.servic
 import type { NotificationsService } from '../notifications/notifications.service.js';
 import { actionDto } from './ask.dto.js';
 import { ModelMarketplaceActionSchema, authorizeProposal, marketplaceSummary, type MarketplaceServices } from './ask.marketplace.js';
+import { PRODUCT_GUIDE } from './product-knowledge.js';
 
 export interface AskServices {
   marketplace?: MarketplaceServices;
@@ -29,6 +30,11 @@ const paging = z.strictObject({ cursor: z.string().max(500).optional() });
 export class AskTools {
   private readonly tools = new Map<string, RegisteredTool>();
   constructor(private readonly db: Db, private readonly services: AskServices) {
+    this.add('get_product_guide', 'Read authoritative NeighbourHood product knowledge and navigation. Use for what is a community point, how roles work, giving, borrowing, saved needs, map/radius, photos and app help. Static guide; does not search neighbours or change anything.', z.strictObject({ topic: z.enum(['overview', 'roles', 'sharing', 'borrowing', 'points', 'saved_needs', 'location', 'chat', 'navigation', 'all']).default('overview') }), async ({ topic }) => ({ result: topic === 'all' ? PRODUCT_GUIDE : { topic, guide: PRODUCT_GUIDE[topic] }, parts: [] }));
+    this.add('my_account', 'Read the caller’s actual baseline account label, platform roles, community memberships/statuses and whether a search location is set. No home coordinates, email or private pickup details. Use before answering about my role or memberships; neighbour is not proof of membership.', z.strictObject({}), async (_args, ctx) => {
+      const user = await db.user.findUniqueOrThrow({ where: { id: ctx.userId }, select: { areaLabel: true, preferredLanguage: true, searchRadiusKm: true, homeLat: true, homeLng: true, roles: { select: { role: true } }, memberships: { select: { role: true, status: true, communityId: true, community: { select: { name: true } } }, orderBy: { updatedAt: 'desc' }, take: 100 } } });
+      return { result: { accountLabel: 'neighbour', platformRoles: user.roles.map(r => r.role), memberships: user.memberships.map(m => ({ communityId: m.communityId, communityName: m.community.name, role: m.role, status: m.status })), searchLocationSet: user.homeLat !== null && user.homeLng !== null, publicArea: user.areaLabel, preferredLanguage: user.preferredLanguage, searchRadiusKm: user.searchRadiusKm }, parts: [] };
+    });
     if (services.marketplace) {
       const market = services.marketplace;
       this.add('list_categories', 'Read supported product categories.', z.strictObject({}), async () => ({ result: { categories: ItemCategorySchema.options }, parts: [] }));

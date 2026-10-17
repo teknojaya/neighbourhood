@@ -6,8 +6,9 @@ import {
   AI_LIMITS, ASK_LIMITS, ApiRoutes, AskAttachmentSchema, AskRunSchema, AskSessionSchema,
   AskSessionDetailSchema, AskSessionPageSchema, AskStatusSchema, type AskMessage, type AskSendBody,
 } from '@neighbourhood/shared';
-import { Alert, Button, Dialog, Skeleton } from '../../components/ui';
-import { CloseIcon, SparkIcon } from '../../components/icons';
+import { ActionPill, Alert, Button, Dialog, pillActionClass, Skeleton } from '../../components/ui';
+import { BookmarkIcon, BoxIcon, CloseIcon, HistoryIcon, PlusIcon, SearchIcon, SendIcon, SparkIcon, TrashIcon } from '../../components/icons';
+import { AttachmentButton } from './AttachmentButton';
 import { useTextDraft } from '../../lib/textDrafts';
 import { t } from '../../i18n';
 import { api, ApiError } from '../../lib/api';
@@ -37,11 +38,11 @@ export function AskPage() {
   return <div className="conversation-page mx-auto w-full max-w-3xl">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h1 className="text-xl font-bold">Ask NeighbourHood</h1>
-      <Button type="button" variant="ghost" onClick={() => setHistoryOpen(true)}>History</Button>
+      <ActionPill type="button" onClick={() => setHistoryOpen(true)}><HistoryIcon />History</ActionPill>
     </div>
     <div className="flex shrink-0 items-center justify-between gap-2 text-sm">
-      <Link to="/needs/saved" className="inline-flex min-h-11 items-center font-semibold text-brand-800 underline">Saved needs</Link>
-      <Button type="button" variant="ghost" disabled={create.isPending} onClick={() => { setCreatedSessionId(null); setNewChatKey(crypto.randomUUID()); setParams({}); }}>New chat</Button>
+      <Link to="/needs/saved" className={pillActionClass}><BookmarkIcon />Saved needs</Link>
+      <ActionPill type="button" disabled={create.isPending} onClick={() => { setCreatedSessionId(null); setNewChatKey(crypto.randomUUID()); setParams({}); }}><PlusIcon />New chat</ActionPill>
     </div>
     {historyOpen && <Dialog label="Chat history" onClose={() => setHistoryOpen(false)}>
       <div className="flex items-center justify-between"><h2 className="text-xl font-bold">Chat history</h2><Button variant="ghost" aria-label="Close history" onClick={() => setHistoryOpen(false)}><CloseIcon /></Button></div>
@@ -148,7 +149,7 @@ function AskChat({ sessionId, ensureSession, available, imagesAvailable, onDelet
   return <div className="conversation-page">
     {sessionId && <div className="flex shrink-0 items-center justify-between gap-2">
       <h2 className="min-w-0 break-words font-semibold">{detail.data?.session.title ?? t('ask.newChat')}</h2>
-      <Button type="button" variant="ghost" disabled={isRunning || removeChat.isPending || !online} onClick={() => { if (window.confirm(t('ask.deleteConfirm'))) removeChat.mutate(); }}>{t('ask.delete')}</Button>
+      <button type="button" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-stone-600 hover:bg-stone-100 disabled:text-stone-400" title={t('ask.delete')} aria-label={t('ask.delete')} disabled={isRunning || removeChat.isPending || !online} onClick={() => { if (window.confirm(t('ask.deleteConfirm'))) removeChat.mutate(); }}><TrashIcon /></button>
     </div>}
     {sessionId && detail.isPending && <Skeleton cards={1} />}
     {detail.isError && <Alert tone="error">{featureError(detail.error)}</Alert>}
@@ -156,7 +157,7 @@ function AskChat({ sessionId, ensureSession, available, imagesAvailable, onDelet
     <div ref={historyRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1" aria-label={t('ask.history')}>
       {(older ? older.before !== null : detail.data?.messages.beforeSequence != null) && <Button type="button" variant="secondary" disabled={loadOlder.isPending} onClick={() => loadOlder.mutate()}>{t('ask.older')}</Button>}
       {loadOlder.isError && <Alert tone="error">{featureError(loadOlder.error)}</Alert>}
-      {messages.length === 0 && <div className="mx-auto max-w-md space-y-4 py-5 sm:py-10"><div className="text-brand-700"><SparkIcon /></div><h2 className="text-2xl font-bold tracking-tight">A little help from your neighbourhood.</h2><p className="text-sm leading-relaxed text-stone-600">Find something you need, give an item a new home, or arrange a loan. You review every change before it happens.</p><div className="flex flex-wrap gap-2">{(['find', 'donate', 'borrow'] as const).map(kind => <Button key={kind} variant="secondary" type="button" onClick={() => { setText(t(`ask.prompt.${kind}`)); inputRef.current?.focus(); }}>{t(`ask.starter.${kind}`)}</Button>)}</div></div>}
+      {messages.length === 0 && <div className="mx-auto max-w-md space-y-4 py-5 sm:py-10"><div className="text-brand-700"><SparkIcon /></div><h2 className="text-2xl font-bold tracking-tight">A little help from your neighbourhood.</h2><p className="text-sm leading-relaxed text-stone-600">Find something you need, give an item a new home, or arrange a loan. You review every change before it happens.</p><div className="flex flex-wrap gap-2">{(['find', 'donate', 'borrow'] as const).map(kind => <ActionPill key={kind} type="button" onClick={() => { setText(t(`ask.prompt.${kind}`)); inputRef.current?.focus(); }}>{kind === 'find' ? <SearchIcon /> : kind === 'donate' ? <PlusIcon /> : <BoxIcon />}{t(`ask.starter.${kind}`)}</ActionPill>)}</div></div>}
       {messages.map((message) => <article key={message.id} className={`space-y-3 ${message.role === 'user' ? 'ml-6 rounded-2xl bg-brand-50 p-3' : 'mr-2'}`}>
         <p className="text-xs font-semibold text-stone-500">{message.role === 'user' ? t('ask.you') : t('ask.assistant')}</p>
         {sessionId && message.attachments.length > 0 && <div className="flex flex-wrap gap-2">{message.attachments.map((attachment) => <PrivatePhoto key={attachment.id} sessionId={sessionId} attachment={attachment} />)}</div>}
@@ -173,15 +174,13 @@ function AskChat({ sessionId, ensureSession, available, imagesAvailable, onDelet
       {upload.isError && <Alert tone="error">{featureError(upload.error)}</Alert>}
       {removePhoto.isError && <Alert tone="error">{featureError(removePhoto.error)}</Alert>}
       <label className="sr-only" htmlFor="ask-message">{t('ask.message')}</label>
-      <textarea ref={inputRef} id="ask-message" value={text} onChange={(event) => setText(event.target.value)} maxLength={ASK_LIMITS.textChars} rows={2} placeholder={t('ask.placeholder')} disabled={isRunning} className="block w-full resize-none rounded-xl border border-stone-300 bg-white p-3 text-base disabled:bg-stone-100" />
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        {imagesAvailable && <label className="inline-flex min-h-11 cursor-pointer items-center px-2 text-sm font-semibold text-brand-800">Camera<input aria-label="Take photo" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="sr-only" disabled={!online || isRunning || upload.isPending || photos.length >= ASK_LIMITS.attachmentsPerMessage} onChange={event => { const file = event.target.files?.[0]; if (file) upload.mutate(file); event.target.value = ''; }} /></label>}
-        {imagesAvailable && <label className="cursor-pointer rounded-xl px-2 py-2 text-sm font-semibold text-brand-800">{upload.isPending ? t('ask.uploading') : t('ask.attach')}
-          <input aria-label={t('ask.attach')} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={!online || isRunning || upload.isPending || photos.length >= ASK_LIMITS.attachmentsPerMessage} onChange={(event) => { const file = event.target.files?.[0]; if (file) upload.mutate(file); event.target.value = ''; }} />
-        </label>}
+      <div className="flex items-end gap-2">
+        {imagesAvailable && <AttachmentButton uploading={upload.isPending} disabled={!online || isRunning || upload.isPending || photos.length >= ASK_LIMITS.attachmentsPerMessage} onFile={file => upload.mutate(file)} />}
+        <textarea ref={inputRef} id="ask-message" value={text} onChange={(event) => setText(event.target.value)} maxLength={ASK_LIMITS.textChars} rows={2} placeholder={t('ask.placeholder')} disabled={isRunning} className="block min-w-0 flex-1 resize-none bg-white text-base disabled:bg-stone-100" />
         {isRunning ? <Button type="button" variant="secondary" disabled={!online || stop.isPending} onClick={() => stop.mutate()}>{t('ask.stop')}</Button>
-          : <Button type="submit" disabled={!available || !online || upload.isPending || removePhoto.isPending || (!text.trim() && photos.length === 0)}>{t('ask.send')}</Button>}
+          : <button type="submit" aria-label={t('ask.send')} title={t('ask.send')} disabled={!available || !online || upload.isPending || removePhoto.isPending || (!text.trim() && photos.length === 0)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-700 text-white hover:bg-brand-800 disabled:bg-stone-200 disabled:text-stone-500"><SendIcon /></button>}
       </div>
+      {upload.isPending && <p role="status" className="text-sm text-brand-800">Uploading photo…</p>}
       <details className="text-xs text-stone-600"><summary className="cursor-pointer">{t('ask.privacySummary')}</summary><p className="pt-1">{t('ask.privacy')}</p></details>
     </form>
   </div>;

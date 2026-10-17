@@ -246,6 +246,8 @@ Direct, compact controls with comfortable shared touch targets. The canonical bu
 
 Offering labels say **Free to keep** or **Borrow & return**, so color never bears the meaning alone. Compact cards use the frontmatter chip padding and caption type; detail pages use larger support-size labels with 0.25rem by 0.75rem padding. Mode and activity controls are segmented groups: three equal buttons on stone, a white selected segment and deep-teal selected text, exposed through `aria-pressed`. Each shared mode segment has a 44px minimum height.
 
+Utility actions use the shared `ActionPill` or equivalent link class: a fully rounded white control, stone edge, deep-teal label, 44px minimum height and 18px outline icon. History, Saved needs, New chat and Home utilities keep visible words beside their icons. Status labels remain static; action pills remain buttons or links.
+
 ### Cards / Containers
 
 General cards are white with a stone edge, `2xl` corners and the card padding token. Listing cards clip their media and use 0.75rem detail padding; the whole card links to item details and its border turns teal on hover. Title and public area/distance wrap. Images load lazily; missing and broken photos show the outline box and **No photo yet** rather than synthetic product imagery. Nested general cards flatten through the global surface rule.
@@ -262,11 +264,19 @@ Five labeled outline-icon tabs retain their order: Home, Explore, Ask, Activity,
 
 Ask starts with a usable composer, one invitation and three starters; opening it does not create a blank server session. The white composer has a stone border that turns teal on focus within. Its textarea is visually integrated, with its own border and outline removed inside the composer. User Ask messages use pale teal; neighbour messages sent by the resident use solid teal, while incoming messages use white with a stone ring. Message text preserves line breaks.
 
+The composer places a 44px round attachment `+` before the two-row textarea and a named round Send icon after it. The attachment control opens a native auto popover with Take photo and Photo library, plus file limits and an explicit close control. Escape and outside dismissal preserve native behavior. Session deletion is a named trash icon with confirmation. At short heights, the history region scrolls while the composer and navigation retain their own space.
+
 History and modal forms use the native dialog: centered, up to 36rem wide, one-rem viewport clearance, maximum height `calc(100dvh - 2rem)`, scrollable content and `2xl` corners. Opening locks body scroll; Escape triggers dismissal, and unmount restores prior focus. Inline Share preserves facts and the selected File in account-scoped memory through navigation, with explicit discard and origin-aware cancel; successful publication, refresh and sign-out clear the draft.
 
 ### Loading, empty and feedback
 
 Skeletons represent pending requests using stone blocks inside the same surface/grid geometry, with an accessible Loading status and decorative blocks hidden from assistive technology. Settled empty states use readable text and the next available action, never skeleton geometry. Error, information, warning and success alerts use the semantic palette, `xl` corners and compact support type. Errors have alert semantics; other tones use status semantics. Offline uses a dark stone strip and explicit text; unsupported mutations remain disabled according to connectivity and action state.
+
+Home and Explore show item-shaped skeletons while the profile or enabled item query is pending. A loaded profile without coordinates shows a dashed setup surface with **Choose your search area** and **Set location**; a paused query does not imply loading.
+
+### Search area map
+
+Explore offers an opt-in map using the resident's saved search point. The white, stone-edged section retains `2xl` corners, a labelled Show/Hide map action and provider disclosure. The lazy map reserves 256px on phones and 288px on wider screens. A teal circle shows the selected kilometre radius; a small teal dot with a white edge marks the resident's saved point. Only this point is drawn. Fit radius restores the extent; Change location opens Profile. Attribution stays visible, and tile failure keeps the search usable with a Retry map action. Automated screenshot tiles are labelled synthetic and are not product imagery or evidence of provider availability.
 
 ## Do's and Don'ts
 

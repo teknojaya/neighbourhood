@@ -36,3 +36,63 @@ An independent reviewer loaded the installed Impeccable 4.6.0 role in a fresh ag
 - City/region is the resident's public area label, not independently verified location metadata. Exact coordinates and pickup instructions retain their existing private server boundaries.
 - The existing production bundle size and PWA tooling deprecation warnings remain. Real bucket credentials, SMTP and web-push configuration still follow `integration-handoff.md`; this UI pass does not claim those external release checks are complete.
 - Finish-review disposition and design-system evidence are recorded under the web app's Impeccable artifacts and `DESIGN.md`.
+
+## Follow-up: icon controls, location map and agent knowledge
+
+The four supplied 440×956 screenshots prompted a focused extension on the same
+`feat/mobile-first-ui` branch. History, Saved needs, New chat and Home utility
+actions now use labelled icon pills. One attachment + beside the Ask textarea
+opens native Take photo and Photo library choices; Send and Delete chat retain
+accessible names as icon controls. Existing photo limits, private storage,
+session creation and explicit confirmation contracts are unchanged.
+
+Home/Explore now distinguish pending Profile/item requests (item-shaped
+skeletons), missing saved coordinates (Choose your search area / Set location),
+and settled zero results. The supplied empty feeds had no saved location, so
+their item queries were paused rather than pending.
+
+Explore offers a lazy, opt-in Leaflet map with the caller's saved point, selected
+radius circle, Fit radius, Change location and tile retry. Radius changes update
+both search and circle. Panning is visual only. OpenStreetMap attribution stays
+visible, and the disclosure explains sharing the viewed area with the tile
+provider. Tile requests use an origin-only cross-origin referrer policy; exact
+neighbour pickup pins are absent. CSP permits only the required tile image host.
+Leaflet 1.9.4 and its types are pinned. No new migration or environment key is
+required. Production provider capacity and physical-device behavior still need
+release review.
+
+Ask now reads curated product facts using `get_product_guide`, with topics for
+roles, sharing, loans, physical collection points, saved needs, location, chat
+and navigation. `my_account` reads only the caller's actual roles/membership
+statuses and safe preferences. It returns whether a search location exists,
+without exposing coordinates or email. The system orientation explicitly
+distinguishes neighbour accounts from community membership and physical points
+from reward scores. General product help does not create marketplace actions.
+
+Follow-up verification:
+
+- `npm run check`: 94 unit tests, type checking, lint and production/PWA builds.
+- `npm run test:db`: 46 PostgreSQL integration tests, including guide read-only
+  behavior and caller-account isolation. All nine migrations were current; the
+  separate temporary PostgreSQL server was stopped.
+- `npm run smoke:ui-refinements`: native History/Escape, fresh chat, Saved needs,
+  both photo pickers, short composer bounds, map opt-in/radius/fit/hide/failure
+  and successful retry, and delayed-request skeletons versus missing-location
+  setup. Thirteen local captures include 320/440px phones and 1440px desktop.
+  Map requests are intercepted with clearly labelled synthetic tiles; this does
+  not verify public-provider availability. No automated requests reach OSM.
+- The real Gemini Ask smoke passed product-point explanations, a fixture's
+  actual category-editor role with no inferred community membership, saved-need
+  confirmation/history, private bucket upload/retry, image understanding and
+  chat deletion independent of saved needs. Disposable records were removed.
+- The complete real Gemini/bucket two-user mobile marketplace smoke passed
+  after the follow-up, including native image upload, reviewed publication,
+  requests/pickup/chat/collection, dated loans, point creation and deposits.
+- The single manual Impeccable 4.6.0 detector pass had no primary findings. Two
+  advisory values were in unchanged incumbent CSS (selection color and the
+  small textarea radius); no ignores or unrelated token repairs were added.
+
+The in-app browser was disabled in Work settings for this follow-up. Local Edge
+test harnesses supplied interaction/capture evidence. This extension does not
+claim a fresh independent finish verdict or physical iOS/Android camera and
+keyboard certification. No PR or deployment was created.

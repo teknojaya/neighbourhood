@@ -22,3 +22,10 @@ export const BoxIcon = () => <svg {...base}><path d="m3 7 9-4 9 4v10l-9 4-9-4Z" 
 export const ChatIcon = () => <svg {...base}><path d="M21 11a8 8 0 0 1-8 8H7l-4 3V11a9 9 0 0 1 18 0Z" /><path d="M8 10h8M8 14h5" /></svg>;
 export const BellIcon = () => <svg {...base}><path d="M5 10a7 7 0 0 1 14 0c0 5 2 6 2 6H3s2-1 2-6M9 20h6" /></svg>;
 export const CloseIcon = () => <svg {...base}><path d="m6 6 12 12M6 18 18 6" /></svg>;
+export const HistoryIcon = () => <svg {...base}><path d="M3 11a9 9 0 1 1 2.7 7M3 5v6h6M12 7v5l3 2" /></svg>;
+export const BookmarkIcon = () => <svg {...base}><path d="M6 3h12v18l-6-4-6 4Z" /></svg>;
+export const CameraIcon = () => <svg {...base}><path d="m8 5 2-2h4l2 2h4v15H4V5Z" /><circle cx="12" cy="12" r="4" /></svg>;
+export const ImageIcon = () => <svg {...base}><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8" cy="8" r="1.5" /><path d="m3 17 5-5 4 4 4-6 5 7" /></svg>;
+export const SendIcon = () => <svg {...base}><path d="m21 3-7 18-4-7-7-4 18-7ZM10 14 21 3" /></svg>;
+export const TrashIcon = () => <svg {...base}><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" /></svg>;
+export const MapIcon = () => <svg {...base}><path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2ZM9 3v16M15 5v16" /></svg>;

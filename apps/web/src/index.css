@@ -41,6 +41,10 @@ h1, h2, h3 { text-wrap: balance; }
 .composer textarea { border: 0; padding: 4px; border-radius: 4px; }
 .composer textarea:focus { outline: 0; }
 .composer:focus-within { border-color: #0f766e; }
+.attachment-popover { inset: auto; bottom: calc(env(safe-area-inset-bottom) + 10rem); left: max(1rem, calc(50% - 23rem)); width: min(20rem, calc(100vw - 2rem)); }
+.search-map { font-family: var(--font-sans); font-size: 14px; }
+.search-map .leaflet-control-zoom a { width: 40px; height: 40px; line-height: 40px; color: #115e59; }
+.search-map .leaflet-control-attribution { color: #44403c; background: #fff; }
 .item-card { transition: border-color 150ms ease-out; }
 .item-card:hover { border-color: #0f766e; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }

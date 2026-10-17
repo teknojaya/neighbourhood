@@ -24,3 +24,7 @@ FORM: Free / Borrow discovery, third dealt structure; `seed:c52a40e5c7f0d48f`. S
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 
 Unresolved: launch geography and complete UI translation. Use existing public area labels, never infer a city or invent verification, match counts or loan availability.
+
+## Follow-up refinement — 2026-10-17
+
+User-supplied four phone screenshots at 440×956 establish the current controls and missing-location state. Preserve the selected world and composition. Requested extensions: icon-and-label pill actions for History, New chat and Saved needs; one + beside the composer to choose Camera/Photo library; readable loading skeletons, with a real setup state when location is absent; an optional Explore map showing only the caller’s saved location and selected radius. Opening the map loads OpenStreetMap tiles, with visible attribution and provider disclosure; exact neighbour locations remain private. Map panning does not change the search centre. Ask must explain product concepts from implemented rules and read current account roles before making personal membership claims. Verify phone, short conversation and desktop sizes, photo choices, delayed queries, map/radius changes and product guide/account authorization.

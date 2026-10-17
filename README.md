@@ -40,6 +40,7 @@ key. See the [integration runbook](docs/integration-handoff.md).
 | `npm run test:db` | Isolated PostgreSQL permission, stock and concurrency tests |
 | `npm run smoke:marketplace` | Real Gemini/bucket and two-user mobile journey; local disposable fixtures only |
 | `npm run smoke:ui` | Local demo navigation, draft recovery, loading/empty states and responsive captures |
+| `npm run smoke:ui-refinements` | Ask photo controls, no-location/pending states and map radius/recovery; synthetic test tiles |
 | `npm run smoke:unread` | Authorized unread counts and header read-state updates; disposable local fixtures |
 | `npm run smoke:ask -w @neighbourhood/api` | Real tools, private images, confirmation and history |
 | `npm run maintenance -w @neighbourhood/api` | Request expiry, push outbox and orphan photo cleanup |
@@ -59,6 +60,10 @@ and `SMOKE_SCREENSHOT_DIR` for mobile captures. They remove only their fixtures.
   and inventory-backed donation listings.
 - Ask sessions/history, camera/photos, streamed progress, typed tools,
   review/confirm/cancel and recovery; direct forms remain available.
+- Ask product help and caller-role lookup, plus an opt-in Explore map of the
+  resident's saved search point/radius. Maps use attributed OpenStreetMap tiles
+  without a new API key; search works when tiles fail. Automated map checks
+  intercept tile requests with clearly labelled synthetic fixtures.
 
 [Architecture](docs/architecture.md) · [API](docs/api-contracts.md) ·
 [Status](docs/implementation-status.md) · [Runbook](docs/integration-handoff.md) ·

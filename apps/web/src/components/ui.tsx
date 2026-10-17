@@ -1,5 +1,6 @@
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
 import { useEffect, useId, useRef } from 'react';
+import { Link } from 'react-router';
 import { t } from '../i18n';
 
 export function Button({
@@ -18,6 +19,16 @@ export function Button({
       {...props}
     />
   );
+}
+
+export const pillActionClass = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-brand-800 hover:border-brand-700 hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-stone-500 [&_svg]:h-[18px] [&_svg]:w-[18px]';
+
+export function ActionPill({ className = '', ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
+  return <button className={`${pillActionClass} ${className}`} {...props} />;
+}
+
+export function LocationRequired({ compact = false }: { compact?: boolean }) {
+  return <section className={`rounded-2xl border border-dashed border-stone-300 bg-white ${compact ? 'p-4' : 'p-5'}`}><h2 className="font-semibold">Choose your search area</h2><p className="mt-1 text-sm leading-relaxed text-stone-600">Set a location in Profile to see nearby items and your search radius. Your exact location stays private.</p><Link to="/profile" className="mt-3 inline-flex min-h-11 items-center rounded-full bg-brand-700 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-800">Set location</Link></section>;
 }
 
 export function TextField({ label, hint, ...props }: InputHTMLAttributes<HTMLInputElement> & { label: string; hint?: string }) {

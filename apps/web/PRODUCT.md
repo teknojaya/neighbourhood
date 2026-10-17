@@ -51,11 +51,18 @@ actions or neighbours' eligibility. Direct browsing and forms remain available.
   explicitly replaced with ordinary product categories.
 - Search uses a confirmed location and 1/3/5/10 km radius. A neighbourhood label
   alone does not replace coordinates. Public locations are approximate.
+- Explore has an opt-in OpenStreetMap view of the resident's own saved search
+  point and selected radius. Panning does not move the search centre; Profile
+  changes it. Tile loading shares the viewed area with the provider; exact
+  neighbour pickup locations are not drawn. No geocoding service is implemented.
 - Requests reserve/release/collect stock transactionally. Loans require dates,
   overlap protection, checkout and return. UI changes must preserve these rules.
 - Ask has private sessions/history, photos, listing drafts, typed action cards,
   confirmation/cancellation/recovery and streamed progress. Saved needs are
   independent of chat deletion.
+- Ask reads a curated product guide for product terminology and workflows. Its
+  account tool reads the caller's real roles/membership statuses without home
+  coordinates or email. The neighbour label does not imply community membership.
 - Exact pickup details require authorization and stay out of model context.
   Community point addresses become public only with partner consent. QR codes
   identify points and do not grant permissions.
@@ -104,6 +111,6 @@ belong in the subsequent design brief, not this product record.
 ## Open Product Decisions
 
 - Initial launch geography and the default UI language have not been confirmed.
-- Full bilingual UI, saved-need editing and location lookup/map services must be
-  scoped explicitly if implementation requires new data or provider integration.
+- Full bilingual UI, saved-need editing, geocoding and a production map provider
+  capacity plan remain open. The existing opt-in map uses public OSM tiles.
 - No formal accessibility certification or measured usability target is claimed.

@@ -72,7 +72,7 @@ export function createApp(deps: AppDeps): Express {
           // apis.google.com: Firebase Auth helper for Google sign-in (popup/redirect).
           scriptSrc: ["'self'", 'https://apis.google.com'],
           styleSrc: ["'self'", "'unsafe-inline'"],
-          imgSrc: ["'self'", 'data:', 'blob:', 'https://firebasestorage.googleapis.com', 'https://storage.googleapis.com'],
+          imgSrc: ["'self'", 'data:', 'blob:', 'https://firebasestorage.googleapis.com', 'https://storage.googleapis.com', 'https://tile.openstreetmap.org'],
           connectSrc: [
             "'self'",
             'https://identitytoolkit.googleapis.com',

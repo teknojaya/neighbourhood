@@ -35,6 +35,10 @@ loop; visible text/progress is persisted and polled by the client. One active
 run per session, cancellation checks and retry keys protect interrupted turns.
 
 Read tools use the same authorized domain services as direct UI controls.
+`get_product_guide` reads curated implemented-product facts; `my_account` reads
+only the authenticated caller's platform roles, community memberships/statuses
+and safe profile preferences. It returns a location-set flag, never home
+coordinates or email. A neighbour account label does not imply membership.
 Write tools prepare stored review cards. Explicit confirmation executes the
 same services using deterministic idempotency keys. Listing edits check the
 version captured in the proposal. Execution recovery has a separate lease and
@@ -62,6 +66,13 @@ short-lived HMAC listing URLs. Direct client Storage access is denied. No
 unauthenticated upload route or local-disk production storage remains.
 
 The PWA service worker caches the app shell only; API responses are no-store.
+Explore lazy-loads Leaflet after Show map. Browser image requests load standard
+OpenStreetMap tiles with visible attribution and an origin-only cross-origin
+referrer policy. The map draws only the caller's saved point and radius; no
+exact listing/pickup pins or private model data are sent to the tile service.
+The app does not prefetch or cache tile areas in its service worker. Tile
+failure leaves item search usable. Provider capacity/policy remains a release
+consideration; no new API key or database migration is required for this view.
 Mutations require connectivity and are not silently queued offline. The same
 worker receives generic opt-in FCM messages and opens only safe app links.
 

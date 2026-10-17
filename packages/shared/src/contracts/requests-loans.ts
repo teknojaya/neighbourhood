@@ -67,6 +67,7 @@ export const CreateLoanBodySchema = z.strictObject({
   endDate: IsoDateSchema,
   message: z.string().trim().max(500).default(''),
 });
+export type CreateLoanBody = z.infer<typeof CreateLoanBodySchema>;
 
 export const LoanTransitionBodySchema = z.strictObject({
   to: LoanStatusSchema.exclude(['pending']),

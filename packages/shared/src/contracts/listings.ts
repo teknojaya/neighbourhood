@@ -87,7 +87,7 @@ export type ListingPrivate = z.infer<typeof ListingPrivateSchema>;
 
 export const CreateListingBodySchema = z
   .strictObject({
-    pointInventoryItemId: z.uuid().nullable().default(null),
+    pointInventoryItemId: z.uuid().nullable().optional().default(null),
     mode: ListingModeSchema,
     category: ItemCategorySchema,
     title: z.string().trim().min(3).max(100),

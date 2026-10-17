@@ -82,12 +82,19 @@ export const errorHandler: ErrorRequestHandler = (err: unknown, req, res, _next)
         ? new HttpError('PAYLOAD_TOO_LARGE', 'Request body too large')
         : new HttpError('BAD_REQUEST', 'Malformed request body');
   } else {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    const errorStack = err instanceof Error ? err.stack : undefined;
     logger.error('unhandled_error', {
       requestId: req.get('x-cloud-trace-context') ?? undefined,
       path: req.path,
       errorName: err instanceof Error ? err.name : typeof err,
+      errorMessage: errorMsg,
+      stack: errorStack,
     });
-    httpErr = new HttpError('INTERNAL', 'Something went wrong');
+    httpErr = new HttpError(
+      'INTERNAL',
+      process.env.NODE_ENV !== 'production' && errorMsg ? errorMsg : 'Something went wrong',
+    );
   }
   const body: ApiErrorBody = {
     error: { code: httpErr.code, message: httpErr.message, ...(httpErr.details ? { details: httpErr.details } : {}) },

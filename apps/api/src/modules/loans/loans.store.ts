@@ -87,4 +87,181 @@ export class LoansStore {
       throw err;
     }
   }
+
+  /**
+   * Retrieves active/approved date ranges for a listing to prevent double booking.
+   */
+  async getBookedDates(listingId: string): Promise<Array<{ startDate: string; endDate: string; status: LoanStatus }>> {
+    const today = iso(new Date());
+    const loans = await this.db.loan.findMany({
+      where: {
+        listingId,
+        status: { in: ['approved', 'checked_out'] },
+      },
+      select: {
+        startDate: true,
+        endDate: true,
+        status: true,
+      },
+      orderBy: { startDate: 'asc' },
+    });
+
+    return loans.map((l) => ({
+      startDate: iso(l.startDate),
+      endDate: l.status === 'checked_out' && iso(l.endDate) < today ? today : iso(l.endDate),
+      status: l.status,
+    }));
+  }
+
+  /**
+   * Retrieves incoming loan requests and active loans for the item owner.
+   */
+  async getIncoming(ownerId: string) {
+    const now = new Date();
+    const records = await this.db.loan.findMany({
+      where: { ownerId },
+      include: {
+        listing: {
+          select: {
+            id: true,
+            title: true,
+            category: true,
+            photos: { take: 1, orderBy: { position: 'asc' } },
+          },
+        },
+        borrower: {
+          select: {
+            id: true,
+            displayName: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return records.map((r) => ({
+      id: r.id,
+      listingId: r.listingId,
+      ownerId: r.ownerId,
+      borrowerId: r.borrowerId,
+      borrowerName: r.borrower.displayName ?? 'Neighbour',
+      listingTitle: r.listing.title,
+      listingCategory: r.listing.category,
+      listingPhoto: r.listing.photos[0]?.storagePath
+        ? `/api/v1/storage/file?path=${encodeURIComponent(r.listing.photos[0].storagePath)}`
+        : null,
+      startDate: iso(r.startDate),
+      endDate: iso(r.endDate),
+      status: r.status,
+      overdue: r.status === 'checked_out' && iso(r.endDate) < iso(now),
+      checkedOutAt: r.checkedOutAt?.toISOString() ?? null,
+      returnedAt: r.returnedAt?.toISOString() ?? null,
+      returnConditionNote: r.returnConditionNote,
+      message: r.message,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+    }));
+  }
+
+  /**
+   * Retrieves outgoing loan requests and active loans for the borrower.
+   */
+  async getOutgoing(borrowerId: string) {
+    const now = new Date();
+    const records = await this.db.loan.findMany({
+      where: { borrowerId },
+      include: {
+        listing: {
+          select: {
+            id: true,
+            title: true,
+            category: true,
+            photos: { take: 1, orderBy: { position: 'asc' } },
+          },
+        },
+        owner: {
+          select: {
+            id: true,
+            displayName: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return records.map((r) => ({
+      id: r.id,
+      listingId: r.listingId,
+      ownerId: r.ownerId,
+      borrowerId: r.borrowerId,
+      ownerName: r.owner.displayName ?? 'Neighbour',
+      listingTitle: r.listing.title,
+      listingCategory: r.listing.category,
+      listingPhoto: r.listing.photos[0]?.storagePath
+        ? `/api/v1/storage/file?path=${encodeURIComponent(r.listing.photos[0].storagePath)}`
+        : null,
+      startDate: iso(r.startDate),
+      endDate: iso(r.endDate),
+      status: r.status,
+      overdue: r.status === 'checked_out' && iso(r.endDate) < iso(now),
+      checkedOutAt: r.checkedOutAt?.toISOString() ?? null,
+      returnedAt: r.returnedAt?.toISOString() ?? null,
+      returnConditionNote: r.returnConditionNote,
+      message: r.message,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+    }));
+  }
+
+  /**
+   * Retrieves single loan detail ensuring caller is participant.
+   */
+  async getById(loanId: string, userId: string) {
+    const now = new Date();
+    const record = await this.db.loan.findUnique({
+      where: { id: loanId },
+      include: {
+        listing: {
+          select: {
+            id: true,
+            title: true,
+            category: true,
+            photos: { take: 1, orderBy: { position: 'asc' } },
+          },
+        },
+        owner: { select: { id: true, displayName: true } },
+        borrower: { select: { id: true, displayName: true } },
+      },
+    });
+
+    if (!record) throw new DomainError('BAD_REQUEST', 'Loan not found');
+    if (record.ownerId !== userId && record.borrowerId !== userId) {
+      throw new DomainError('FORBIDDEN', 'You are not a participant in this loan');
+    }
+
+    return {
+      id: record.id,
+      listingId: record.listingId,
+      ownerId: record.ownerId,
+      borrowerId: record.borrowerId,
+      ownerName: record.owner.displayName ?? 'Neighbour',
+      borrowerName: record.borrower.displayName ?? 'Neighbour',
+      listingTitle: record.listing.title,
+      listingCategory: record.listing.category,
+      listingPhoto: record.listing.photos[0]?.storagePath
+        ? `/api/v1/storage/file?path=${encodeURIComponent(record.listing.photos[0].storagePath)}`
+        : null,
+      startDate: iso(record.startDate),
+      endDate: iso(record.endDate),
+      status: record.status,
+      overdue: record.status === 'checked_out' && iso(record.endDate) < iso(now),
+      checkedOutAt: record.checkedOutAt?.toISOString() ?? null,
+      returnedAt: record.returnedAt?.toISOString() ?? null,
+      returnConditionNote: record.returnConditionNote,
+      message: record.message,
+      createdAt: record.createdAt.toISOString(),
+      updatedAt: record.updatedAt.toISOString(),
+    };
+  }
 }
+

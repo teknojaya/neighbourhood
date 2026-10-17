@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import type { FirebaseObjectStorage } from '../../lib/storage.js';
+import type { VerifiableObjectStorage } from '../../lib/storage.js';
 import { HttpError, parseQuery } from '../../lib/http.js';
 
-export function storageReadRouter(storage: FirebaseObjectStorage): Router {
+export function storageReadRouter(storage: VerifiableObjectStorage): Router {
   const r = Router();
   r.get('/storage/file', async (req, res) => {
     const q = parseQuery(z.object({ path: z.string().max(300), expires: z.string().max(20), signature: z.string().max(64) }), req);

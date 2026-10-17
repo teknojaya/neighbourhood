@@ -68,7 +68,18 @@ export class LoansService {
   async availability(userId: string, id: string) {
     const listing = await this.db.listing.findUnique({ where: { id } });
     if (!listing || listing.mode !== 'lend' || (listing.status !== 'active' && listing.ownerId !== userId)) throw new HttpError('NOT_FOUND', 'Item not found');
-    return { items: (await this.db.loan.findMany({ where: { listingId: id, status: { in: ['approved', 'checked_out'] } }, select: { startDate: true, endDate: true, status: true } })).map(row => ({ startDate: iso(row.startDate), endDate: iso(row.endDate), checkedOut: row.status === 'checked_out' })) };
+    const loans = await this.db.loan.findMany({
+      where: { listingId: id, status: { in: ['approved', 'checked_out'] } },
+      select: { startDate: true, endDate: true, status: true },
+      orderBy: { startDate: 'asc' },
+    });
+    const items = loans.map(row => ({
+      startDate: iso(row.startDate),
+      endDate: iso(row.endDate),
+      status: row.status,
+      checkedOut: row.status === 'checked_out',
+    }));
+    return { items, booked: items };
   }
   private notify(tx: Tx, userId: string, id: string, title: string) { return tx.notification.create({ data: { userId, type: 'loan_update', title, body: 'Your borrowing activity has an update.', link: `/activity?loan=${id}` } }); }
 }

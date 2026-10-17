@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getStorage } from 'firebase-admin/storage';
@@ -8,7 +9,7 @@ import { createApp } from './app.js';
 import { ConfigError, loadConfig } from './config.js';
 import { createDb } from './lib/db.js';
 import { logger } from './lib/logger.js';
-import { FirebaseObjectStorage } from './lib/storage.js';
+import { FirebaseObjectStorage, LocalFileObjectStorage } from './lib/storage.js';
 import { AiService } from './modules/ai/ai.service.js';
 import { GeminiAdapter } from './modules/ai/gemini.adapter.js';
 import { PrismaAccessRepository } from './modules/auth/access.js';
@@ -30,7 +31,7 @@ import { PrismaNotificationsService } from './modules/notifications/notification
 import { PrismaNeedsService } from './modules/needs/needs.service.js';
 import { PrismaAskService } from './modules/ask/ask.service.js';
 import { GeminiAskModel } from './modules/ask/ask.model.js';
-import { FirebaseAskImageStorage } from './modules/ask/ask.images.js';
+import { FirebaseAskImageStorage, LocalAskImageStorage } from './modules/ask/ask.images.js';
 
 function main() {
   // Safe environment loading for local development
@@ -78,15 +79,26 @@ function main() {
     Boolean(config.firebase.projectId),
   );
 
-  const photoStorage = config.firebase.storageBucket ? new FirebaseObjectStorage(getStorage(firebaseApp), config.firebase.storageBucket,
-    process.env.STORAGE_SIGNING_SECRET ? Buffer.from(process.env.STORAGE_SIGNING_SECRET) : undefined) : undefined;
+  const localStorageDir = path.resolve(process.env.STORAGE_LOCAL_DIR || 'uploads');
+  const storageSecret = process.env.STORAGE_SIGNING_SECRET ? Buffer.from(process.env.STORAGE_SIGNING_SECRET) : undefined;
+  const localPhotoStorage = new LocalFileObjectStorage(localStorageDir, storageSecret);
+  const useLocalStorage = config.firebase.useEmulators || !config.firebase.storageBucket || process.env.STORAGE_DRIVER === 'local';
+
+  const photoStorage = useLocalStorage
+    ? localPhotoStorage
+    : new FirebaseObjectStorage(getStorage(firebaseApp), config.firebase.storageBucket!, storageSecret, !config.deployed ? localPhotoStorage : undefined);
   const listings = new ListingsService(db, photoStorage);
   const matching = new MatchingService(db, listings, generator);
+
+  const localAskStorage = new LocalAskImageStorage(path.resolve(localStorageDir, 'ask-attachments'));
+  const askImageStorage = useLocalStorage
+    ? localAskStorage
+    : (config.firebase.storageBucket ? new FirebaseAskImageStorage(getStorage(firebaseApp), config.firebase.storageBucket, !config.deployed ? localAskStorage : undefined) : null);
 
   const services = { loans: new LoansService(db), communities: new CommunitiesService(db), needs: new PrismaNeedsService(db), requests: new PrismaRequestsService(db), conversations: new PrismaConversationsService(db), notifications: new PrismaNotificationsService(db) };
   const askServices = { ...services, marketplace: { listings, loans: services.loans, communities: services.communities, matching }, listings: { get: async (userId: string, id: string) => (await listings.getListingDetail(userId, id)).listing } };
   const ask = new PrismaAskService(db, config.gemini ? new GeminiAskModel(config.gemini.model, config.gemini.apiKey) : null,
-    config.firebase.storageBucket ? new FirebaseAskImageStorage(getStorage(firebaseApp), config.firebase.storageBucket) : null, askServices);
+    askImageStorage, askServices);
   // Storage cleanup is retryable; soft-deleted chats are never readable meanwhile.
   void ask.purgeDeletedSessions().catch(() => logger.warn('ask_cleanup_unavailable'));
   const cleanup = setInterval(() => { void ask.purgeDeletedSessions().catch(() => logger.warn('ask_cleanup_unavailable')); }, 15 * 60_000);
@@ -116,6 +128,7 @@ function main() {
       port: config.port,
       env: config.env,
       authEmulator: config.firebase.useEmulators,
+      storageDriver: useLocalStorage ? 'local' : 'firebase',
       aiAvailable: generator !== null,
       aiModel: config.gemini?.model ?? null,
       emailOtpAvailable: config.emailOtp !== null,

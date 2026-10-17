@@ -5,7 +5,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getStorage } from 'firebase-admin/storage';
 import sharp from 'sharp';
 import { z } from 'zod';
-import { AskActionSchema, AskAttachmentSchema, AskRunSchema, AskSessionDetailSchema, AskSessionSchema, AskStatusSchema, SavedNeedPageSchema } from '@neighbourhood/shared';
+import { AskActionSchema, AskAttachmentSchema, AskRunSchema, AskSessionDetailSchema, AskSessionSchema, AskStatusSchema, ListingDraftSchema, SavedNeedPageSchema } from '@neighbourhood/shared';
 import { createDb } from '../src/lib/db.js';
 
 // Explicitly local: this script creates and removes only its own disposable user.
@@ -94,7 +94,7 @@ try {
   report('PASS real Gemini image understanding');
 
   phase = 'owned-photo structured listing assistance';
-  const suggested = await api('/ai/listing-draft', 'POST', { sessionId: session.id, attachmentId: photo.id, hint: 'A synthetic red picture card offered for donation. Unknown condition and quantity.' });
+  const suggested = z.object({ requiresUserReview: z.literal(true), draft: ListingDraftSchema }).parse(await api('/ai/listing-draft', 'POST', { sessionId: session.id, attachmentId: photo.id, hint: 'A synthetic red picture card offered for donation. Unknown condition and quantity.' }));
   assert(suggested.requiresUserReview && suggested.draft);
   report('PASS real owned-photo listing suggestions requiring review');
 

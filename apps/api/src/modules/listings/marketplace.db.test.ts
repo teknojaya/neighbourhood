@@ -100,6 +100,7 @@ describe('integrated marketplace against PostgreSQL', () => {
     expect(outcomes.filter(o => o.status === 'fulfilled')).toHaveLength(1);
     if (outcomes[0]!.status === 'fulfilled') { await f.loans.transition(f.owner.id, randomUUID(), a.body.id, { to: 'checked_out' }); await f.loans.transition(f.owner.id, randomUUID(), a.body.id, { to: 'returned', returnConditionNote: 'Working and clean' }); expect((await f.loans.get(f.neighbour.id, a.body.id)).status).toBe('returned'); }
     await request(f.app).get(`/api/v1/loans/${a.body.id}`).set('Authorization', bearer(f.outsider.firebaseUid)).expect(404);
+    const inbox = await request(f.app).get('/api/v1/notifications').set('Authorization', bearer(f.owner.firebaseUid)).expect(200); expect(inbox.body.items.some((item: { type: string }) => item.type === 'loan_update')).toBe(true);
   });
   it('requires moderator/volunteer roles, consent and explicit accepted counts; audits stock exactly once', async () => {
     const f = await fixture(); await db.userRole.create({ data: { userId: f.owner.id, role: 'staff' } });
@@ -114,6 +115,7 @@ describe('integrated marketplace against PostgreSQL', () => {
     await expect(f.communities.review(f.outsider.id, randomUUID(), deposit.body.id, { to: 'accepted', acceptedQuantities: [3] })).rejects.toMatchObject({ code: 'FORBIDDEN' });
     await expect(f.communities.review(f.neighbour.id, randomUUID(), deposit.body.id, { to: 'accepted', acceptedQuantities: [4] })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
     const key = randomUUID(); await f.communities.review(f.neighbour.id, key, deposit.body.id, { to: 'accepted', acceptedQuantities: [2] }); await f.communities.review(f.neighbour.id, key, deposit.body.id, { to: 'accepted', acceptedQuantities: [2] });
+    const depositInbox = await request(f.app).get('/api/v1/notifications').set('Authorization', bearer(f.outsider.firebaseUid)).expect(200); expect(depositInbox.body.items.some((item: { type: string }) => item.type === 'deposit_update')).toBe(true);
     const stock = (await f.communities.inventory(point.body.id)).items[0]!; expect(stock.available).toBe(2);
     await f.communities.adjust(f.neighbour.id, randomUUID(), point.body.id, { itemId: stock.id, delta: -1, reason: 'collected', note: 'Collected in person' });
     await expect(f.communities.adjust(f.neighbour.id, randomUUID(), point.body.id, { itemId: stock.id, delta: -2, reason: 'damaged', note: 'Checked in person' })).rejects.toMatchObject({ code: 'INSUFFICIENT_STOCK' });
@@ -160,6 +162,7 @@ describe('integrated marketplace against PostgreSQL', () => {
     await f.requests.transition(f.owner.id, randomUUID(), req.body.id, { to: 'approved' }); await db.donationRequest.update({ where: { id: req.body.id }, data: { pickupBy: new Date(Date.now() - 1000) } });
     const sent: string[] = []; const jobs = new MaintenanceService(db, { send: async (tokens, message) => { sent.push(JSON.stringify(message)); return { successCount: tokens.length, invalidTokens: [] }; } });
     expect(await jobs.expireRequests()).toBe(1); expect(await jobs.expireRequests()).toBe(0); expect((await f.listings.getListingDetail(f.owner.id, listing.id)).listing.stock.reserved).toBe(0);
+    const inbox = await request(f.app).get('/api/v1/notifications').set('Authorization', bearer(f.neighbour.firebaseUid)).expect(200); expect(inbox.body.items.some((item: { type: string }) => item.type === 'request_expired')).toBe(true);
     await jobs.deliverPush(); expect(sent.every(message => !message.includes('PRIVATE') && !message.includes('Children books'))).toBe(true);
   });
 });

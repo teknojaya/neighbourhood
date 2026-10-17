@@ -52,7 +52,9 @@ async function mobile(who) {
 async function layout(page) { assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Mobile horizontal overflow'); }
 try {
   const owner = await user('Smoke Owner'), neighbour = await user('Smoke Neighbour');
+  phase = 'browser launch';
   browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHANNEL } : {}) });
+  phase = 'mobile sign-in';
   const donor = await mobile(owner), recipient = await mobile(neighbour);
   phase = 'mobile publication';
   await donor.page.goto(new URL('/activity', web).href);
@@ -195,6 +197,7 @@ try {
   const qr = await api(neighbour, '/points/by-qr/' + point.qrId); assert.equal(qr.id, point.id); assert.equal(qr.publicAddress, null);
   await layout(donor.page); await layout(recipient.page);
   report('PASS Ask secure point creation, mobile point deep link, membership, deposit, volunteer review, inventory-backed publication and private QR resolution');
+  for (const account of [owner, neighbour]) { const inbox = await api(account, '/notifications'); assert(inbox.items.some(item => item.type === 'loan_update')); if (account === neighbour) assert(inbox.items.some(item => item.type === 'deposit_update')); }
   for (const route of ['/needs?chat=' + session.id, '/explore', '/activity', '/messages', '/notifications', '/communities', '/needs/saved']) { await recipient.page.goto(new URL(route, web).href); await recipient.page.locator('h1,h2').first().waitFor(); await layout(recipient.page); }
   assert.equal(donor.errors.length + recipient.errors.length, 0, 'Browser runtime error');
   const output = process.env.SMOKE_SCREENSHOT_DIR;

@@ -1,4 +1,4 @@
-import { ItemCategorySchema, RADIUS_OPTIONS_KM } from '@neighbourhood/shared';
+import { ItemCategorySchema, MAX_RADIUS_KM, MIN_RADIUS_KM, RADIUS_OPTIONS_KM } from '@neighbourhood/shared';
 
 /** Curated product facts, grounded in implemented services. No resident data belongs here. */
 export const PRODUCT_GUIDE = {
@@ -39,7 +39,9 @@ export const PRODUCT_GUIDE = {
   location: {
     setup: 'Set a search location in Profile with device location or manual coordinates and save. Add a public neighbourhood/city/region label. Search uses the saved point, not an assumed live GPS location.',
     radiusKm: RADIUS_OPTIONS_KM,
-    map: 'Explore opens with the caller’s saved search location and selected radius circle directly below its title. Search, offering, category and radius filters are below the map. Home also has a category dropdown beneath All/Free/Borrow; View all carries the offering and category into Explore. Changing the radius updates the search and circle. The map can be hidden. Panning does not move the search centre; change it in Profile. No exact neighbour pickup pins are exposed.',
+    manualRadius: { min: MIN_RADIUS_KM, max: MAX_RADIUS_KM, unit: 'whole kilometres', explore: 'Search distance opens manual input directly below the map; Apply radius updates this search only. Profile can save a default.' },
+    searchAnswers: 'Always name the radius checked. With no nearby results, the service separately checks the same query/category/offering up to 50 km and labels any farther matches. If that check is empty, say none found within that checked range at this time, never none anywhere or a promise that widening will help. Ask which radius the person prefers; the card can draft a radius reply. Borrow listings still need date availability and approval.',
+    map: 'Explore opens with the caller’s saved search location and selected radius circle directly below its title. Search, offering, category and radius filters are below the map. Home also has a category dropdown beneath All/Free/Borrow; View all carries the offering and category into Explore. Changing the radius updates the search and circle. The map can be hidden. Panning does not move the search centre; change it in Profile. Product pins group matching items by rounded public area; their numbers are item counts, not exact pickup locations. No exact neighbour pickup pins are exposed.',
     loading: 'Skeletons appear only while Profile or item data is loading. With no saved location, the item query is paused and a location setup state is shown. Settled zero results are an empty state, not an endless skeleton.',
   },
   chat: {

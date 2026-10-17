@@ -69,11 +69,18 @@ The PWA service worker caches the app shell only; API responses are no-store.
 Explore lazy-loads Leaflet below its title once the saved location is available;
 the map starts open and can be hidden. Browser image requests load standard
 OpenStreetMap tiles with visible attribution and an origin-only cross-origin
-referrer policy. The map draws only the caller's saved point and radius; no
-exact listing/pickup pins or private model data are sent to the tile service.
+referrer policy. The map draws the caller's saved point/radius and groups
+eligible listing pins by rounded public coordinates; no exact listing/pickup
+pins or private model data are sent to the tile service.
 The app does not prefetch or cache tile areas in its service worker. Tile
 failure leaves item search usable. Provider capacity/policy remains a release
-consideration; no new API key or database migration is required for this view.
+consideration; no new API key is required for this view. Manual search radii
+accept whole kilometres from 1 to 50; the tenth migration expands the saved
+Profile constraint. Ask result cards retain the checked radius and separate
+farther eligible matches from nearby results. Radius reply choices draft chat
+messages without modifying the Profile preference. See
+[playground-seed.md](playground-seed.md) for reproducible accounts, product photos
+and full marketplace scenarios.
 Mutations require connectivity and are not silently queued offline. The same
 worker receives generic opt-in FCM messages and opens only safe app links.
 

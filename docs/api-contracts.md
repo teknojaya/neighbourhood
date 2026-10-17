@@ -24,6 +24,14 @@ use cursor pagination where defined by the shared schema.
 
 Important integration contracts:
 
+- Search/profile `radiusKm` / `searchRadiusKm` accept whole kilometres from 1
+  through 50. Migration `20261018000000_manual_search_radius` expands the
+  PostgreSQL profile constraint. Invalid/fractional values are rejected.
+- Ask listing parts optionally carry `search` metadata: the checked `radiusKm`,
+  an optional `broaderRadiusKm` and separately typed `fartherItems`. Older
+  listing cards remain readable. Radius choices draft a user reply; they do not
+  mutate profile preferences or approve marketplace actions.
+
 - `GET /notifications/unread`: `{ messages, updates }` for the signed-in account only. Message counts exclude the viewer's own messages and respect each participant's read watermark. Update counts include all unread inbox entries, independent of pagination. No migration is required.
 - Ask read-only tools `get_product_guide({ topic })` and `my_account({})` are
   internal model tools, not new public endpoints. Guide topics cover roles,

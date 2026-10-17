@@ -3,13 +3,14 @@ import { z } from 'zod';
 import type { ApproximateLocation, LatLng } from './common.js';
 
 export const RADIUS_OPTIONS_KM = [1, 3, 5, 10] as const;
-export type RadiusKm = (typeof RADIUS_OPTIONS_KM)[number];
+export const MIN_RADIUS_KM = 1;
+export const MAX_RADIUS_KM = 50;
+export type RadiusKm = number;
 export const DEFAULT_RADIUS_KM: RadiusKm = 3;
 
-/** Accepts query-string input ("3") and only the supported radius options. */
+/** Whole kilometres, bounded for predictable geo queries and manual input. */
 export const RadiusKmSchema = z.coerce
-  .number()
-  .pipe(z.literal(RADIUS_OPTIONS_KM))
+  .number().int().min(MIN_RADIUS_KM).max(MAX_RADIUS_KM)
   .default(DEFAULT_RADIUS_KM);
 
 export const GEOHASH_PRECISION = 9;

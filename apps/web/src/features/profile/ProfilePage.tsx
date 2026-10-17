@@ -1,4 +1,4 @@
-import { DEFAULT_RADIUS_KM, RADIUS_OPTIONS_KM, type RadiusKm, type UiLanguage } from '@neighbourhood/shared';
+import { DEFAULT_RADIUS_KM, MAX_RADIUS_KM, MIN_RADIUS_KM, RADIUS_OPTIONS_KM, type UiLanguage } from '@neighbourhood/shared';
 import { type FormEvent, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { useAuth } from '../../auth/AuthProvider';
@@ -19,7 +19,7 @@ export function ProfilePage() {
   const [areaLabel, setAreaLabel] = useState('');
   const [lat, setLat] = useState('');
   const [lng, setLng] = useState('');
-  const [radius, setRadius] = useState<RadiusKm>(DEFAULT_RADIUS_KM);
+  const [radius, setRadius] = useState(String(DEFAULT_RADIUS_KM));
   const [language, setLanguage] = useState<UiLanguage>('en');
   const [geoState, setGeoState] = useState<'idle' | 'locating' | 'unavailable'>('idle');
 
@@ -30,7 +30,7 @@ export function ProfilePage() {
     setAreaLabel(profile.areaLabel ?? '');
     setLat(profile.homeLocation ? String(profile.homeLocation.lat) : '');
     setLng(profile.homeLocation ? String(profile.homeLocation.lng) : '');
-    setRadius(profile.searchRadiusKm);
+    setRadius(String(profile.searchRadiusKm));
     setLanguage(profile.preferredLanguage);
   }, [profile]);
 
@@ -55,7 +55,7 @@ export function ProfilePage() {
       displayName: displayName.trim(),
       areaLabel: areaLabel.trim() || null,
       homeLocation: hasLocation ? { lat: Number(lat), lng: Number(lng) } : null,
-      searchRadiusKm: radius,
+      searchRadiusKm: Number(radius),
       preferredLanguage: language,
     });
   }
@@ -99,14 +99,15 @@ export function ProfilePage() {
             <legend className="text-sm font-medium">{t('profile.radius')}</legend>
             <div className="grid grid-cols-4 gap-2">
               {RADIUS_OPTIONS_KM.map((km) => (
-                <label key={km} className={`flex min-h-11 cursor-pointer items-center justify-center rounded-xl text-sm font-semibold ring-1 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-brand-700 ${radius === km ? 'bg-brand-700 text-white ring-brand-700' : 'bg-white ring-stone-300'}`}>
-                  <input type="radio" name="radius" value={km} checked={radius === km} onChange={() => setRadius(km)} className="sr-only" />
+                <label key={km} className={`flex min-h-11 cursor-pointer items-center justify-center rounded-xl text-sm font-semibold ring-1 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-brand-700 ${Number(radius) === km ? 'bg-brand-700 text-white ring-brand-700' : 'bg-white ring-stone-300'}`}>
+                  <input type="radio" name="radius" value={km} checked={Number(radius) === km} onChange={() => setRadius(String(km))} className="sr-only" />
                   {t('profile.radiusOption', { km })}
                 </label>
               ))}
             </div>
           </fieldset>
 
+          <TextField label="Custom search radius (km)" type="number" inputMode="numeric" min={MIN_RADIUS_KM} max={MAX_RADIUS_KM} step={1} required value={radius} onChange={event => setRadius(event.target.value)} hint="Enter 1–50 km, in whole kilometres." />
           <label className="block space-y-1">
             <span className="text-sm font-medium">Preferred language for Ask</span>
             <select value={language} onChange={(e) => setLanguage(e.target.value as UiLanguage)} className="block min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3">

@@ -23,6 +23,7 @@ import { CommunitiesService } from '../communities/communities.service.js';
 import { MaintenanceService } from '../notifications/maintenance.service.js';
 import { MatchingService } from '../needs/matching.service.js';
 import { PrismaAskService } from '../ask/ask.service.js';
+import { AskTools } from '../ask/ask.tools.js';
 import { ListingsService } from './listings.service.js';
 
 const db = createDb(testDatabaseUrl());
@@ -57,6 +58,23 @@ afterAll(async () => {
   await db.$disconnect();
 });
 describe('integrated marketplace against PostgreSQL', () => {
+  it('persists manual radii and distinguishes nearby, farther and absent search results without leaking exact locations', async () => {
+    const f = await fixture();
+    await request(f.app).put('/api/v1/me/profile').set('Authorization', bearer(f.neighbour.firebaseUid)).send({ displayName: 'Raka', areaLabel: 'Test neighbourhood', homeLocation: body().exactLocation, searchRadiusKm: 7, preferredLanguage: 'en' }).expect(200);
+    expect((await db.user.findUniqueOrThrow({ where: { id: f.neighbour.id } })).searchRadiusKm).toBe(7);
+    const far = await f.listings.createListing(f.owner.id, { ...body(), title: 'Needlecraft sewing machine', category: 'appliances', exactLocation: { lat: -6.14, lng: 106.816 } }, randomUUID());
+    const tools = new AskTools(db, { needs: f.needs, requests: f.requests, conversations: f.conversations, notifications: f.notifications, marketplace: { listings: f.listings, loans: f.loans, communities: f.communities } });
+    const session = await f.ask.create(f.neighbour.id, randomUUID());
+    const run = await db.askRun.create({ data: { sessionId: session.id, clientMessageId: randomUUID(), requestHash: 'a'.repeat(64) } });
+    const ctx = { userId: f.neighbour.id, sessionId: session.id, runId: run.id, attemptId: run.attemptId, signal: new AbortController().signal };
+    const nearby = await tools.execute('search_listings', { query: 'sewing', radiusKm: 3 }, ctx);
+    expect(nearby.result).toMatchObject({ radiusKm: 3, broaderRadiusKm: 50, items: [], fartherItems: [{ id: far.id }] });
+    expect(JSON.stringify(nearby.result)).not.toMatch(/pickupInstructions|homeLat|homeLng|PRIVATE pickup/);
+    const wider = await tools.execute('search_listings', { query: 'sewing', radiusKm: 7 }, ctx);
+    expect(wider.result).toMatchObject({ radiusKm: 7, broaderRadiusKm: null, items: [{ id: far.id }], fartherItems: [] });
+    const absent = await tools.execute('search_listings', { query: 'nonexistent-' + randomUUID(), radiusKm: 50 }, ctx);
+    expect(absent.result).toMatchObject({ radiusKm: 50, broaderRadiusKm: null, items: [], fartherItems: [] });
+  });
   it('publishes exactly once, searches nearby, protects pickup, and completes the donation journey', async () => {
     const f = await fixture(); const key = randomUUID();
     const listing = await f.listings.createListing(f.owner.id, body(), key);

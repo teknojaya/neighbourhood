@@ -47,7 +47,7 @@ export interface AppDeps {
   ai: AiService;
   matching?: MatchingService;
   db?: Db;
-  demoSignIn?: (uid: 'demo-owner' | 'demo-neighbour' | 'demo-volunteer') => Promise<string>;
+  demoSignIn?: (uid: 'demo-owner' | 'demo-neighbour' | 'demo-volunteer' | 'demo-moderator' | 'demo-newcomer') => Promise<string>;
   requests: RequestsService;
   conversations: ConversationsService;
   notifications: NotificationsService;
@@ -124,7 +124,7 @@ export function createApp(deps: AppDeps): Express {
   api.use(express.json({ limit: '32kb' }));
   // Public sign-in support (auth methods, email OTP → Firebase custom token).
   api.use(authPublicRouter(deps.otp));
-  if (deps.config.firebase.useEmulators && deps.demoSignIn) api.post('/auth/demo', async (req, res) => { const body = parseBody(z.strictObject({ uid: z.enum(['demo-owner', 'demo-neighbour', 'demo-volunteer']) }), req); res.json({ customToken: await deps.demoSignIn!(body.uid) }); });
+  if (deps.config.firebase.useEmulators && deps.demoSignIn) api.post('/auth/demo', async (req, res) => { const body = parseBody(z.strictObject({ uid: z.enum(['demo-owner', 'demo-neighbour', 'demo-volunteer', 'demo-moderator', 'demo-newcomer']) }), req); res.json({ customToken: await deps.demoSignIn!(body.uid) }); });
   if (deps.communities) api.get('/points/qr-image/:qrId', async (req, res) => {
     const qrId = z.string().regex(/^[A-Za-z0-9_-]{16,64}$/).parse(req.params.qrId);
     await deps.communities!.qr(qrId);

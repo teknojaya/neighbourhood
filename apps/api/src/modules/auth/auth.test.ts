@@ -107,6 +107,6 @@ describe('profiles: identity comes from the token only', () => {
 
   it('rejects unsupported search radius values', async () => {
     const { app } = buildTestApp();
-    await request(app).put('/api/v1/me/profile').set('Authorization', bearer('dave')).send({ ...profile, searchRadiusKm: 7 }).expect(400);
+    await request(app).put('/api/v1/me/profile').set('Authorization', bearer('dave')).send({ ...profile, searchRadiusKm: 51 }).expect(400);
   });
 });

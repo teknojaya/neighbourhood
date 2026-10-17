@@ -20,6 +20,7 @@ service-account*.json
 application_default_credentials.json
 *.pem
 *.key
+playground-accounts.local.json
 
 # Generated Prisma client (run `npm run prisma:generate -w @neighbourhood/api`)
 apps/api/src/generated/

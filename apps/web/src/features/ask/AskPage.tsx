@@ -162,7 +162,7 @@ function AskChat({ sessionId, ensureSession, available, imagesAvailable, onDelet
         <p className="text-xs font-semibold text-stone-500">{message.role === 'user' ? t('ask.you') : t('ask.assistant')}</p>
         {sessionId && message.attachments.length > 0 && <div className="flex flex-wrap gap-2">{message.attachments.map((attachment) => <PrivatePhoto key={attachment.id} sessionId={sessionId} attachment={attachment} />)}</div>}
         {message.text && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.text}</p>}
-        {sessionId && message.parts.map((part, index) => <AskCard key={index} part={part} sessionId={sessionId} onEditDraft={() => { setText(t('ask.editDraftPrompt')); inputRef.current?.focus(); }} />)}
+        {sessionId && message.parts.map((part, index) => <AskCard key={index} part={part} sessionId={sessionId} onReply={reply => { setText(reply); inputRef.current?.focus(); }} onEditDraft={() => { setText(t('ask.editDraftPrompt')); inputRef.current?.focus(); }} />)}
       </article>)}
       {isRunning && <Alert><p role="status">{({ thinking: 'Thinking…', searching: 'Looking nearby…', reading: 'Checking your activity…', preparing: 'Preparing a review card…', answering: 'Writing a reply…' } as const)[detail.data?.latestRun?.progress ?? 'thinking']}</p>{detail.data?.latestRun?.partialText && <p className="mt-2 whitespace-pre-wrap break-words text-sm">{detail.data.latestRun.partialText}</p>}</Alert>}
       {failedRun && <Alert tone="error"><p>{featureError(new ApiError(failedRun.errorCode ?? 'INTERNAL', '', 0))}</p><Button type="button" variant="secondary" disabled={isRunning || !online || !available} onClick={retryTurn}>{t('common.retry')}</Button></Alert>}

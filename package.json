@@ -15,6 +15,7 @@
   "scripts": {
     "smoke:ui": "node scripts/smoke-ui.mjs",
     "smoke:ui-refinements": "node scripts/smoke-ui-refinements.mjs",
+    "smoke:playground": "node scripts/smoke-playground.mjs",
     "smoke:unread": "node --env-file-if-exists=apps/api/.env --import tsx scripts/smoke-unread.mjs",
     "smoke:marketplace": "node --env-file-if-exists=apps/api/.env --import tsx scripts/smoke-marketplace.mjs",
     "build:shared": "npm run build -w @neighbourhood/shared",

@@ -219,7 +219,7 @@ Ask and selected neighbour conversations use a flex shell sized to the visual vi
 
 ## Elevation & Depth
 
-The shared system is flat: white and stone tonal layers, quiet borders and dividers establish depth. Canonical buttons, cards, the selected mode and navigation do not use raised drop shadows. Input focus adds a two-pixel translucent teal ring; alerts and incoming message bubbles use thin rings. The native modal uses a black 40% backdrop, not an invented floating-card shadow.
+The shared system is flat: white and stone tonal layers, quiet borders and dividers establish depth. Buttons, cards and selected modes stay flat. The requested raised Ask entry is the deliberate exception, with a soft shadow separating its circle from the navigation. Input focus adds a two-pixel translucent teal ring; alerts and incoming message bubbles use thin rings. The native modal uses a black 40% backdrop.
 
 ### Shadow Vocabulary
 
@@ -262,6 +262,8 @@ The shared field has a visible associated label, optional described hint, white 
 
 Five labeled outline-icon tabs retain their order: Home, Explore, Ask, Activity, Profile. Active text/icons are deep teal; inactive content is stone and turns teal on hover. The white navigation is separated by a top border. Header Messages and Updates utilities expose accessible names containing actual global unread counts; badges appear only for positive counts and cap visual text at **99+**. Read operations refresh those counts. The local-demo pill is environment-specific and hidden below 360px.
 
+Ask uses a 48px teal circle raised 16px above the tab row, with its label below and a soft shadow. It remains a normal link to the Ask route. This gives the agent a clear focal point without introducing another conversation modal.
+
 ### Conversation composer and dialog
 
 Ask starts with a usable composer, one invitation and three starters; opening it does not create a blank server session. The white composer has a stone border that turns teal on focus within. Its textarea is visually integrated, with its own border and outline removed inside the composer. User Ask messages use pale teal; neighbour messages sent by the resident use solid teal, while incoming messages use white with a stone ring. Message text preserves line breaks.
@@ -278,7 +280,11 @@ Home and Explore show item-shaped skeletons while the profile or enabled item qu
 
 ### Search area map
 
-Explore opens the map directly below its title using the resident's saved search point. Search and filters follow below it. The white, stone-edged section retains `2xl` corners, a labelled Show/Hide map action and a Map & location disclosure. The lazy map reserves 256px on phones and 288px on wider screens. A teal circle shows the selected kilometre radius; a small teal dot with a white edge marks the resident's saved point. Only this point is drawn. Fit radius restores the extent; Change location opens Profile. Attribution stays visible, and tile failure keeps the search usable with a Retry map action. Automated screenshot tiles are labelled synthetic and are not product imagery or evidence of provider availability.
+Explore opens the map directly below its title using the resident's saved search point. The white, stone-edged section retains `2xl` corners, a labelled Show/Hide map action and a Map & location disclosure. The lazy map reserves 256px on phones and 288px on wider screens. A teal circle shows the selected kilometre radius; a small teal dot with a white edge marks the resident's saved point. Public product areas use 36×44px teal teardrop pins with a white count centre, grouping listings with the same rounded coordinates. Keyboard-accessible popups link to products and explain that the area is approximate, not the pickup address. Popup content scrolls within 180px. Fit radius restores the extent; Change location opens Profile. Attribution stays visible, and tile failure keeps the search usable with a Retry map action. Automated screenshot tiles are labelled synthetic and are not evidence of provider availability.
+
+The Search distance disclosure sits directly below the map, before Find an item. Its labelled numeric field accepts whole kilometres from 1 to 50, with an Apply radius action and validation. Profile retains presets and adds the same manual range. Ask results state the searched radius, separate farther matches and offer labelled radius reply pills that draft editable chat messages. Widening a chat search does not change the saved Profile preference.
+
+Seeded products may use the repository's generated household photos as authorized test content. Unmatched products and missing uploads keep the existing honest no-photo fallback. Real resident listings use their own uploaded photos.
 
 ## Do's and Don'ts
 

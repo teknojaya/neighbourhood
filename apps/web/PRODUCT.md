@@ -49,12 +49,14 @@ actions or neighbours' eligibility. Direct browsing and forms remain available.
 - Ordinary product categories cover groceries, clothing, books, household items,
   appliances and mobility aids. The former special assistance terminology was
   explicitly replaced with ordinary product categories.
-- Search uses a confirmed location and 1/3/5/10 km radius. A neighbourhood label
+- Search uses a confirmed location and a manual whole-kilometre radius from
+  1–50 km, with 1/3/5/10 km profile presets. A neighbourhood label
   alone does not replace coordinates. Public locations are approximate.
 - Explore opens an OpenStreetMap view of the resident's own saved search
   point and selected radius below its title; it can be hidden. Panning does not move the search centre; Profile
   changes it. Tile loading shares the viewed area with the provider; exact
-  neighbour pickup locations are not drawn. No geocoding service is implemented.
+  product pins group rounded public areas, while exact neighbour pickup
+  locations are not drawn. No geocoding service is implemented.
 - Requests reserve/release/collect stock transactionally. Loans require dates,
   overlap protection, checkout and return. UI changes must preserve these rules.
 - Ask has private sessions/history, photos, listing drafts, typed action cards,
@@ -63,6 +65,10 @@ actions or neighbours' eligibility. Direct browsing and forms remain available.
 - Ask reads a curated product guide for product terminology and workflows. Its
   account tool reads the caller's real roles/membership statuses without home
   coordinates or email. The neighbour label does not imply community membership.
+- Search cards state the requested distance, separate farther matches from
+  nearby items, and offer editable radius replies. A zero-result search may
+  check the same filters up to 50 km; no result means none in that checked area
+  at that time, not global unavailability or a promise of future matches.
 - Exact pickup details require authorization and stay out of model context.
   Community point addresses become public only with partner consent. QR codes
   identify points and do not grant permissions.

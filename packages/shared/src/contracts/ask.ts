@@ -10,6 +10,13 @@ import { ListingPublicSchema } from './listings.js';
 import { LoanSchema } from './requests-loans.js';
 import { CommunitySchema, CommunityPointSchema, PointInventoryItemSchema, DepositSchema, MembershipSchema, StockAdjustmentSchema } from './communities.js';
 import { NeedMatchesSchema } from './needs.js';
+import { RadiusKmSchema } from '../geo.js';
+
+export const AskSearchScopeSchema = z.object({
+  radiusKm: RadiusKmSchema, broaderRadiusKm: RadiusKmSchema.nullable(),
+  query: z.string().max(100).optional(), category: ItemCategorySchema.optional(), mode: ListingModeSchema.optional(),
+  fartherItems: z.array(ListingPublicSchema).max(10),
+});
 
 export const ASK_LIMITS = { textChars: 2000, attachmentsPerMessage: 2, historyMessages: 30, modelRounds: 4, toolCalls: 6, turnMs: 45_000, proposalMs: 10 * 60_000 } as const;
 export const AskSessionSchema = z.object({ id: IdSchema, title: z.string().max(80), createdAt: IsoDateTimeSchema, updatedAt: IsoDateTimeSchema });
@@ -49,7 +56,7 @@ export const AskListingDraftSchema = z.object({ id: IdSchema, data: AskListingDr
 export type AskListingDraft = z.infer<typeof AskListingDraftSchema>;
 export const AskPartSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('matches'), items: NeedMatchesSchema.shape.items }),
-  z.object({ kind: z.literal('listings'), items: z.array(ListingPublicSchema) }),
+  z.object({ kind: z.literal('listings'), items: z.array(ListingPublicSchema), search: AskSearchScopeSchema.optional() }),
   z.object({ kind: z.literal('loans'), items: z.array(LoanSchema) }),
   z.object({ kind: z.literal('communities'), items: z.array(CommunitySchema) }),
   z.object({ kind: z.literal('points'), items: z.array(CommunityPointSchema) }),

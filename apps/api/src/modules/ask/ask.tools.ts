@@ -4,7 +4,7 @@ import {
   ASK_LIMITS, AskActionPayloadSchema, AskListingDraftDataSchema, AskListingDraftSchema,
   CreateDonationRequestBodySchema, DonationRequestTransitionBodySchema, NeedsExtractionSchema,
   type AskActionPayload, type AskPart, type ListingPublic,
-  ItemCategorySchema, ListingModeSchema, RadiusKmSchema, modelSafe,
+  ItemCategorySchema, ListingModeSchema, RadiusKmSchema, MAX_RADIUS_KM, modelSafe,
 } from '@neighbourhood/shared';
 import type { Db } from '../../lib/db.js';
 import { HttpError } from '../../lib/http.js';
@@ -42,8 +42,13 @@ export class AskTools {
       this.add('search_listings', 'Search real eligible nearby items using the caller’s private saved location. Query keywords should be short item names, not whole sentences. Radius is kilometres.', z.strictObject({ query: z.string().max(100).optional(), category: ItemCategorySchema.optional(), mode: ListingModeSchema.optional(), radiusKm: RadiusKmSchema.optional() }), async (args, ctx) => {
         const user = await db.user.findUniqueOrThrow({ where: { id: ctx.userId } });
         if (user.homeLat === null || user.homeLng === null) throw new HttpError('VALIDATION_FAILED', 'Set your location in Profile to search nearby');
-        const items = await market.listings.searchListings({ ...args, searcherId: ctx.userId, center: { lat: user.homeLat, lng: user.homeLng }, radiusKm: args.radiusKm ?? user.searchRadiusKm, limit: 10 });
-        return { result: { items }, parts: [{ kind: 'listings', items }] };
+        const radiusKm = args.radiusKm ?? user.searchRadiusKm;
+        const search = { ...args, searcherId: ctx.userId, center: { lat: user.homeLat, lng: user.homeLng }, radiusKm, limit: 10 };
+        const items = await market.listings.searchListings(search);
+        const broaderRadiusKm = items.length === 0 && radiusKm < MAX_RADIUS_KM ? MAX_RADIUS_KM : null;
+        const fartherItems = broaderRadiusKm ? await market.listings.searchListings({ ...search, radiusKm: broaderRadiusKm }) : [];
+        const scope = { radiusKm, broaderRadiusKm, query: args.query, category: args.category, mode: args.mode, fartherItems };
+        return { result: { items, ...scope, note: 'Items and fartherItems are separate. State the exact radius checked. Empty means no eligible matching listings in that area at this time, never worldwide unavailability. Ask what radius the user wants; do not claim farther items are nearby or reserved.' }, parts: [{ kind: 'listings', items, search: scope }] };
       });
       this.add('get_listing', 'Read one accessible listing by its real UUID. Never returns private pickup details.', z.strictObject({ listingId: z.uuid() }), async (args, ctx) => { const { listing } = await market.listings.getListingDetail(ctx.userId, args.listingId); return { result: { listing }, parts: [{ kind: 'listings', items: [listing] }] }; });
       this.add('list_my_listings', 'Read the caller’s shared items.', z.strictObject({}), async (_args, ctx) => { const items = await market.listings.getMyListings(ctx.userId); return { result: { items }, parts: [{ kind: 'listings', items }] }; });

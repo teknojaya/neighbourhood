@@ -31,7 +31,7 @@ export function Layout() {
     </header>
     {!online && <div role="status" className="shrink-0 bg-stone-800 px-4 py-2 text-center text-sm text-white">{t('common.offline')}</div>}<UpdatePrompt />
     <main className={`app-main min-h-0 flex-1 px-4 sm:px-6 ${conversation ? 'flex flex-col py-3' : 'pt-5 pb-8'}`}><Outlet /></main><ScrollRestoration />
-    <nav aria-label="Main" className={`${conversation ? 'shrink-0' : 'sticky bottom-0'} z-20 border-t border-stone-200 bg-white pb-[env(safe-area-inset-bottom)]`}><ul className="mx-auto grid max-w-2xl grid-cols-5">{NAV.map(({ to, label, icon: Icon }) => <li key={to}><NavLink to={to} end={to === '/'} className={({ isActive }) => `flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl text-xs font-semibold ${isActive ? 'text-brand-800' : 'text-stone-600 hover:text-brand-800'}`}><Icon />{t(label)}</NavLink></li>)}</ul></nav>
+    <nav aria-label="Main" className={`${conversation ? 'shrink-0' : 'sticky bottom-0'} z-20 border-t border-stone-200 bg-white pb-[env(safe-area-inset-bottom)]`}><ul className="mx-auto grid max-w-2xl grid-cols-5">{NAV.map(({ to, label, icon: Icon }) => <li key={to}><NavLink to={to} end={to === '/'} className={({ isActive }) => `flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl text-xs font-semibold ${isActive ? 'text-brand-800' : 'text-stone-600 hover:text-brand-800'}`}><span className={to === '/needs' ? '-mt-4 flex h-12 w-12 items-center justify-center rounded-full bg-brand-700 text-white shadow-md hover:bg-brand-800' : ''}><Icon /></span>{t(label)}</NavLink></li>)}</ul></nav>
   </div>;
 }
 function UnreadBadge({ count }: { count: number }) {

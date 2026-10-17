@@ -122,3 +122,53 @@ single manual detector scan returned no findings. Browser map requests use
 labelled synthetic tiles, now shared by the navigation and marketplace smoke
 harnesses as well; automated checks do not contact OSM. No schema, migration or
 environment change was needed. Existing bundle/PWA warnings remain.
+
+## Follow-up: complete playground, manual radius and public product pins
+
+The latest request adds a raised, labelled Ask navigation circle, puts manual
+Search distance directly below Explore's map and before Find an item, and
+replaces plain product circles with counted teardrop pins. Pins group rounded
+public areas; keyboard-accessible popups link to items without revealing exact
+pickup addresses. Manual whole-kilometre searches accept 1–50 km. The tenth
+migration updates the saved Profile constraint; all previous migrations remain
+unchanged.
+
+Ask cards state the searched radius and distinguish farther results checked
+within 50 km. Empty cards describe the checked area rather than promising an
+item elsewhere. Radius pills draft editable replies and keep the saved Profile
+preference intact. The product guide explains the same behavior.
+
+The additive playground script populates five independent local accounts plus
+an optional existing account. It covers requests, loans, conversations,
+notification history, saved needs, Ask sessions/attachments, communities,
+membership review, deposits, inventory and stock audit records. Product
+coordinates span 0.5–65 km. Seven generated household JPEGs are bundled under
+`apps/api/seed-assets/products`; matching uploads use the existing private bucket
+service. Unmatched products keep their no-photo state. Stable IDs and scoped
+photo upload keys preserve progress on reruns. Seeded history suppresses push
+deliveries. Local and later hosted commands are in `playground-seed.md`.
+
+Verification completed:
+
+- `npm run check`: type checking, lint, 94 unit tests and API/PWA builds passed.
+- 47 PostgreSQL integration tests passed, including manual saved radius,
+  nearby/farther separation and absence checks. All ten migrations are current;
+  the isolated temporary PostgreSQL server was stopped.
+- The real Gemini radius smoke passed a 3 km miss with a farther match, an
+  explicit 20 km follow-up match, and an absent item checked to 50 km.
+- Five independent browser contexts passed full profile, request activity,
+  notification history, saved needs and mapped product checks. Repeated seed
+  runs kept scenario counts stable.
+- The UI refinement harness passed 19 captures, including loaded bucket photos,
+  grouped product popup links, the radius control's placement and 7 km search,
+  Ask reply drafting, native photo pickers, missing-location setup, real pending
+  skeletons and tile failure/recovery. Phone widths 320/440 and desktop 1440 were
+  inspected together. Automated map requests use labelled synthetic tiles.
+- The single manual Impeccable 4.6.0 detector scan had no primary findings. Four
+  advisories concern incumbent small header badges, selection color and textarea
+  corner radius. No ignores or unrelated token changes were added. The final
+  API script changes also passed targeted type checking and lint.
+
+Existing bundle-size/PWA warnings and physical-device camera/keyboard limits
+remain. Production seeding is documented only; no production mutation, PR or
+deployment was performed.

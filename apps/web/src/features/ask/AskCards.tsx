@@ -1,3 +1,4 @@
+import { SearchListingCard } from './SearchListingCard';
 import { PublishDraft } from './PublishDraft';
 import { PointDraft } from './PointDraft';
 import { MarketplacePreview } from './MarketplacePreview';
@@ -38,10 +39,10 @@ export function PrivatePhoto({ sessionId, attachment }: { sessionId: string; att
     : <span className="flex h-28 w-28 items-center justify-center rounded-xl bg-stone-100 p-2 text-xs">{failed ? t('ask.photoUnavailable') : t('common.loading')}</span>;
 }
 
-export function AskCard({ part, sessionId, onEditDraft }: { part: AskPart; sessionId: string; onEditDraft(): void }) {
+export function AskCard({ part, sessionId, onEditDraft, onReply }: { part: AskPart; sessionId: string; onEditDraft(): void; onReply(text: string): void }) {
   switch (part.kind) {
     case 'matches': return <Card className="space-y-3"><h3 className="font-semibold">Matches for your saved need</h3>{part.items.length === 0 && <p>No matches nearby yet.</p>}{part.items.map(item => <Link className="block border-t py-3" key={item.listing.id} to={'/listings/' + item.listing.id}><strong>{item.listing.title}</strong><p className="text-sm">{item.reason}</p>{item.missingInfo.map((info,i) => <p className="text-xs text-stone-600" key={i}>{info}</p>)}</Link>)}</Card>;
-    case 'listings': return <Card className="space-y-3"><h3 className="font-semibold">Nearby items</h3>{part.items.length === 0 && <p>No matching items found. Try a wider radius or a shorter item name.</p>}{part.items.map(item => <Link key={item.id} to={'/listings/' + item.id} className="flex min-h-16 gap-3 border-b py-3">{item.photos[0]?.url && <img className="h-16 w-16 rounded-xl object-cover" src={item.photos[0].url} alt="" />}<div className="min-w-0"><strong className="break-words">{item.title}</strong><p className="text-sm">{item.mode === 'donate' ? `Free to keep · ${item.stock.total - item.stock.reserved - item.stock.collected} available` : 'Borrow & return · choose dates'}</p><p className="text-xs">{item.location.areaLabel}{item.location.distanceKm !== undefined ? ' · ' + item.location.distanceKm + ' km' : ''}</p></div></Link>)}</Card>;
+    case 'listings': return <SearchListingCard part={part} onReply={onReply} />;
     case 'loans': return <Card>{part.items.length === 0 && <p>No loans yet.</p>}{part.items.map(item => <Link className="block py-3" key={item.id} to={'/activity?loan=' + item.id}>{item.listingTitle} · {item.status}<p className="text-sm">{item.startDate} → {item.endDate}{item.overdue ? ' · Overdue' : ''}</p></Link>)}</Card>;
     case 'communities': return <Card>{part.items.map(item => <div key={item.id}><Link className="block py-3" to={'/communities?community=' + item.id}><strong>{item.name}</strong><p>{item.areaLabel} · {item.memberCount} members</p></Link><PointDraft communityId={item.id} sessionId={sessionId} /></div>)}</Card>;
     case 'points': return <Card>{part.items.map(item => <Link className="block py-3" key={item.id} to={'/communities?point=' + item.id}><strong>{item.name}</strong><p>{item.publicAddress ?? item.location.areaLabel}</p></Link>)}</Card>;

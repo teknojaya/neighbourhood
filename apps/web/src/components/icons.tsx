@@ -29,3 +29,4 @@ export const ImageIcon = () => <svg {...base}><rect x="3" y="3" width="18" heigh
 export const SendIcon = () => <svg {...base}><path d="m21 3-7 18-4-7-7-4 18-7ZM10 14 21 3" /></svg>;
 export const TrashIcon = () => <svg {...base}><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" /></svg>;
 export const MapIcon = () => <svg {...base}><path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2ZM9 3v16M15 5v16" /></svg>;
+export const ChevronDownIcon = () => <svg {...base}><path d="m6 9 6 6 6-6" /></svg>;

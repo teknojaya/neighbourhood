@@ -45,6 +45,9 @@ h1, h2, h3 { text-wrap: balance; }
 .search-map { font-family: var(--font-sans); font-size: 14px; }
 .search-map .leaflet-control-zoom a { width: 40px; height: 40px; line-height: 40px; color: #115e59; }
 .search-map .leaflet-control-attribution { color: #44403c; background: #fff; }
+.product-map-pin { color: #0f766e; filter: drop-shadow(0 2px 2px rgb(28 25 23 / 0.2)); }
+.product-map-pin svg { width: 36px; height: 44px; }
+.product-map-pin:hover, .product-map-pin:focus-visible { color: #115e59; }
 .item-card { transition: border-color 150ms ease-out; }
 .item-card:hover { border-color: #0f766e; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }

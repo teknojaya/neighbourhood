@@ -23,7 +23,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:status": "prisma migrate status",
-    "cleanup:photos": "tsx --env-file-if-exists=.env scripts/prune-photo-less-listings.ts"
+    "cleanup:photos": "tsx --env-file-if-exists=.env scripts/prune-photo-less-listings.ts",
+    "cleanup:duplicates": "tsx --env-file-if-exists=.env scripts/cleanup-duplicates.ts"
   },
   "dependencies": {
     "@google/genai": "2.30.0",

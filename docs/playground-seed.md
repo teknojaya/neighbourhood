@@ -2,7 +2,7 @@
 
 Run commands from the repository root with Node 24.12+. The script is additive:
 stable IDs prevent duplicate scenarios, and rerunning the same arguments keeps
-request/loan progress, read markers and existing photos. It creates normal names
+request/loan progress, stock, read markers and existing photos. It creates normal names
 and product titles, without demo prefixes on the records.
 
 ## Local setup for teammates
@@ -33,7 +33,9 @@ The target's existing location is the scenario centre; if absent, the script
 supplies a Jakarta location. Existing personal profile details and other records
 remain intact. `--grant-staff` gives that target staff/category-editor access for
 testing; it is optional. Target accounts become moderators of the seeded
-communities. Each target/scenario combination has its own stable record IDs.
+communities. Each target/scenario combination has its own community/history
+records; the photographed catalog and each resident's sample requests/loan are
+shared across targets/scenarios, so they do not multiply products.
 
 ## Logins and data to explore
 
@@ -48,23 +50,31 @@ one of these local account buttons; no password is required by the emulator:
 | moderator | Dimas Pratama | Community membership, points, staff/category access |
 | newcomer | Nina Sari | Resident with a pending membership in the second community |
 
-Every account has a complete profile/location, incoming and outgoing requests,
-loans, conversations, read/unread updates, three saved needs, three bookmarked
+Every account has a complete profile/location, outgoing requests, a sample loan,
+conversations, read/unread updates, three saved needs, three bookmarked
 items, Ask history, an
 image input and deposits. Use Activity to inspect pending, approved, collected,
-rejected, cancelled and expired requests. Loans cover pending, approved,
-checked-out, returned, rejected and cancelled states. Sharing points have pending
+rejected, cancelled and expired requests. Seeded product owners also receive
+incoming requests/loans. Loan states are distributed across the residents rather
+than creating a new photographed listing for every status. Sharing points have pending
 deposits, accepted stock/audit records and an inventory-backed listing.
 
-The main catalog covers all six categories. Items are placed about 0.5, 1.2, 1.8,
-2.2, 2.6, 2.8, 4.5, 6.5, 9, 16, 28, 44 and 65 km from the centre. Open Explore,
+The main catalog has 17 products across all six categories, each with its own
+matching photo. It includes rice, paracetamol, surplus Nasi Goreng, pantry and
+condiment bundles, a cobek, books, clothing, tableware, a rice cooker, tools,
+walking frame, wheelchair and community boxed rice meals using the supplied
+meal photo. Both community meal boxes and dry pantry parcels have separate
+confirmed point inventory. Bundled photos describe the whole pictured set;
+there are no standalone oil, noodles or ladder listings with unrelated photos.
+Items are placed about 0.5–4.5 km from the initial centre. Open Explore,
 enter a distance below the map and try category/offering filters. Map pins group
 matching products by rounded public area; exact pickup coordinates remain
-private. The 65 km item intentionally falls outside the supported 1–50 km search.
-Workflow-specific listings live farther out so the nearby feed starts with a
-varied catalog. A resident's own listings are excluded from their search.
+private. Requests and loans reference this same catalog instead of creating
+repeated copies for Activity. A resident's own listings are excluded from search.
+Catalog IDs use semantic product keys rather than array positions, so inserting
+new food items cannot turn an existing books listing into a rice listing.
 
-Try Ask: “Find a sewing machine within 3 km”, then “Use 20 km”, or request an
+Try Ask: “Find a drill within 3 km”, then “Use 5 km”, or request an
 absent item. Cards distinguish the requested radius from the wider check, show
 farther matches separately and offer radius replies. No result within 50 km is
 not a claim that the item does not exist anywhere.
@@ -72,9 +82,12 @@ not a claim that the item does not exist anywhere.
 Saved items is available from Profile or Saved needs. Try saving/removing an
 actual product with its bookmark. In a neighbour conversation, use + to send
 your own photo; unsent photos remain private to the uploader. Re-running the
-seed restores its three sample bookmarks if removed.
+seed restores its three sample bookmarks if removed. Surplus cooked food has a
+same-day best-before date and ingredient notes; reruns never renew expiry dates.
+Medicine listings are illustrative sealed/labelled sample content, not medical
+recommendations or proof of actual stock.
 
-For a fresh independent scenario without resetting existing work:
+For additional community/history fixtures without duplicating the catalog:
 
 ```sh
 npm run seed:playground -w @neighbourhood/api -- --scenario round-two
@@ -83,10 +96,39 @@ npm run seed:playground -w @neighbourhood/api -- --scenario round-two
 Keep the target and scenario arguments consistent on reruns. Additional JPEGs
 can be supplied with `--photos-dir /absolute/path`; filenames are lowercase
 product titles with non-alphanumeric runs replaced by `-`, such as
-`sewing-machine.jpg`. Existing listing photos are preserved; if a matching photo's
+`electric-rice-cooker.jpg`. Existing listing photos are preserved; if a matching photo's
 bucket object is missing after an emulator restart, the script restores it from
 the bundled asset. Historical seeded updates appear in the notification feed
 without generating push deliveries.
+
+`seed:demo` is now an alias of `seed:playground`, so running both commands cannot
+add a second books/tool catalog. `--refresh-photos` explicitly replaces changed
+catalog photos by uploading the replacement before removing the old photo.
+
+## Repair older local seed data
+
+Inspect first; equal titles/photos alone never trigger deletion:
+
+```sh
+npm run cleanup:duplicates -w @neighbourhood/api
+npm run seed:playground -w @neighbourhood/api
+npm run cleanup:duplicates -w @neighbourhood/api -- --apply --backup-dir /absolute/path/outside/repo
+npm run smoke:seed-catalog
+```
+
+Use a Windows absolute path when running PowerShell. Set `PG_DUMP_PATH` if
+`pg_dump` is not on PATH. Apply requires a successful full database backup and
+backs up affected photo bytes. Cleanup recognizes old deterministic fixture IDs,
+preserves resident accounts/profiles/needs and protects listings with real
+requests or messages. Bookmarks are merged into the product matching the actual
+old photo. Pass `--scenario NAME` to recognize an older named scenario.
+
+Explicit `--merge-listing ID --into ID` supports a reviewed duplicate of the same
+photographed product. It requires matching category/offering/photo, preserves
+request/loan and conversation IDs, merges bookmarks and recomputes committed
+stock. Cross-owner merges are limited to a recognized old seed product into an
+unused-or-fixture-only catalog product, retaining the original owner. Never use
+this to merge distinct neighbours' real goods just because their titles match.
 
 ## Production / hosted MVP later
 

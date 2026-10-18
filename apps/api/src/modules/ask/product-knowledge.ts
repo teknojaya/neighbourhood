@@ -58,7 +58,8 @@ export const PRODUCT_GUIDE = {
   },
   navigation: {
     home: '/', explore: '/explore', ask: '/needs', savedNeeds: '/needs/saved', savedItems: '/saved-items', donateShare: '/share',
-    activity: '/activity', loans: '/activity?tab=loans', sharedItems: '/activity?tab=giving',
+    start: '/needs', activity: '/activity', requests: '/activity?tab=requests', loans: '/activity?tab=loans', sharedItems: '/activity?tab=giving',
+    labels: 'Start in the bottom navigation opens Ask NeighbourHood. Activity opens Shared items first, followed by Requests and Loans. Wanna share? opens the direct sharing form. Notifications groups unread and read updates; opening an update marks it read.',
     communities: '/communities', messages: '/messages', updates: '/notifications', profile: '/profile', categories: '/categories',
   },
 } as const;

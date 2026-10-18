@@ -29,7 +29,7 @@ try{
  const categoryRequest=page.waitForResponse(response=>{const url=new URL(response.url());return url.pathname==='/api/v1/listings' && url.searchParams.get('category')==='books' && response.ok();});
  await page.getByRole('combobox',{name:'Category',exact:true}).selectOption('books');await categoryRequest;
  await page.getByRole('button',{name:'Borrow',exact:true}).click();await page.getByRole('link',{name:'View all',exact:true}).click();await settled();assert.equal(new URL(page.url()).searchParams.get('mode'),'lend');assert.equal(new URL(page.url()).searchParams.get('category'),'books');assert.equal(await page.getByRole('combobox',{name:'Category',exact:true}).inputValue(),'books');
- phase='Ask action pills and attachment choices';await page.getByRole('navigation',{name:'Main'}).getByRole('link',{name:'Ask',exact:true}).click();await settled();
+ phase='Ask action pills and attachment choices';await page.getByRole('navigation',{name:'Main'}).getByRole('link',{name:'Start',exact:true}).click();await settled();
  await page.getByRole('button',{name:'History',exact:true}).click();await page.getByRole('dialog',{name:'Chat history'}).waitFor();await page.keyboard.press('Escape');
  await page.getByRole('button',{name:'New chat',exact:true}).click();assert(!new URL(page.url()).searchParams.has('chat'));
  await page.getByRole('link',{name:'Saved needs',exact:true}).waitFor();

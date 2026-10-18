@@ -65,7 +65,7 @@ try {
   const composer = page.getByLabel('Message NeighbourHood', { exact: true });
   await composer.fill('Unsaved navigation test draft');
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Activity', exact: true }).click();
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Ask', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Start', exact: true }).click();
   assert.equal(await composer.inputValue(), 'Unsaved navigation test draft');
   await composer.fill('');
   await page.getByRole('button', { name: 'History', exact: true }).click();
@@ -111,7 +111,7 @@ try {
   const login = await anonymous.newPage(); await login.goto(web + '/login'); await login.getByRole('heading', { name: 'Sign in', exact: true }).waitFor(); const loginFile = path.join(out,'login-mobile.png'); await login.screenshot({ path: loginFile, fullPage: true }); captures.push({name:'login-mobile',file:loginFile,viewport:{width:390,height:844},url:'/login'}); await anonymous.close();
   phase = 'sign-out draft isolation';
   await navigate('/share'); await page.getByLabel('Item Title *', { exact: true }).fill('Private draft before sign-out');
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Ask', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Start', exact: true }).click();
   await composer.fill('Draft that must be cleared on sign-out');
   await navigate('/profile'); await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await page.getByRole('button', { name: 'owner', exact: true }).click(); await page.waitForURL(url => url.pathname === '/');

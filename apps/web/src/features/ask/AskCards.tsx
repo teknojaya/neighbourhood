@@ -25,7 +25,7 @@ const marketplaceTitles = {
   notification_read: 'Mark this notification as read', profile_preferences: 'Update your preferences',
 };
 
-export function PrivatePhoto({ sessionId, attachment }: { sessionId: string; attachment: Pick<AskAttachment, 'id'> }) {
+export function PrivatePhoto({ sessionId, attachment, compact = false }: { sessionId: string; attachment: Pick<AskAttachment, 'id'>; compact?: boolean }) {
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -39,8 +39,8 @@ export function PrivatePhoto({ sessionId, attachment }: { sessionId: string; att
     }).catch(() => { if (!controller.signal.aborted) setFailed(true); });
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [sessionId, attachment.id, attempt]);
-  return url ? <img src={url} alt={t('ask.photoAlt')} className="h-28 w-28 rounded-xl object-cover" />
-    : <span className="flex h-28 w-28 flex-col items-center justify-center gap-1 rounded-xl bg-stone-100 p-2 text-xs">{failed ? t('ask.photoUnavailable') : t('common.loading')}{failed && <button type="button" className="min-h-11 text-brand-800 underline" onClick={() => setAttempt(value => value + 1)}>Retry photo</button>}</span>;
+  return url ? <img src={url} alt={t('ask.photoAlt')} className={`${compact ? 'h-20 w-20' : 'h-28 w-28'} rounded-xl object-cover`} />
+    : <span className={`${compact ? 'h-20 w-20' : 'h-28 w-28'} flex flex-col items-center justify-center gap-1 rounded-xl bg-stone-100 p-2 text-xs`}>{failed ? t('ask.photoUnavailable') : t('common.loading')}{failed && <button type="button" className="min-h-11 text-brand-800 underline" onClick={() => setAttempt(value => value + 1)}>Retry photo</button>}</span>;
 }
 
 export function AskCard({ part, sessionId, onEditDraft, onReply, onInput, disabled = false, active = true, radiusAnswered = false, imagesAvailable = true }: { part: AskPart; sessionId: string; onEditDraft(): void; onReply(text: string): void; onInput(input: AskInput): void; disabled?: boolean; active?: boolean; radiusAnswered?: boolean; imagesAvailable?: boolean }) {
@@ -120,11 +120,12 @@ function ActionCard({ action, sessionId }: { action: AskAction; sessionId: strin
   const isMarketplaceHandover = action.payload.kind === 'marketplace' && ((action.payload.action.operation === 'loan_transition' && ['checked_out', 'returned'].includes(action.payload.action.body.to)) || action.payload.action.operation === 'deposit_review' || action.payload.action.operation === 'stock_adjust');
   const isHandover = isMarketplaceHandover || action.payload.kind === 'transition_request' && action.payload.body.to === 'collected';
   const pending = action.status === 'pending';
+  const market = action.payload.kind === 'marketplace' ? action.payload.action : null;
+  const marketplaceReview = market && <MarketplacePreview action={market} photos={market.operation === 'listing_publish' ? <div className="flex flex-wrap gap-2" aria-label="Photos to publish">{market.attachmentIds.map(id => <PrivatePhoto compact key={id} sessionId={sessionId} attachment={{ id }} />)}</div> : undefined} />;
   return <Card className="space-y-3 border-brand-200 bg-brand-50">
     <h3 className="font-semibold">{action.payload.kind === 'marketplace' ? marketplaceTitles[action.payload.action.operation] : t(`ask.action.${action.payload.kind}`)}</h3>
-    <p className="break-words text-sm">{action.summary}</p>
-    {action.payload.kind === 'marketplace' && <MarketplacePreview action={action.payload.action} />}
-    {action.payload.kind === 'marketplace' && action.payload.action.operation === 'listing_publish' && <div className="flex flex-wrap gap-2" aria-label="Photos to publish">{action.payload.action.attachmentIds.map(id => <PrivatePhoto key={id} sessionId={sessionId} attachment={{ id }} />)}</div>}
+    {market?.operation !== 'listing_publish' && <p className="break-words text-sm">{action.summary}</p>}
+    {marketplaceReview && (pending || action.status === 'executing' ? marketplaceReview : <details><summary className="cursor-pointer py-2 text-sm font-semibold text-brand-800">View action details</summary><div className="pt-2">{marketplaceReview}</div></details>)}
     {action.payload.kind === 'send_message' && <><blockquote className="whitespace-pre-wrap break-words rounded-xl bg-stone-50 p-3 text-sm">{action.payload.body}</blockquote><Link className="text-sm text-brand-800 underline" to={`/messages?conversation=${action.payload.conversationId}`}>{t('ask.openConversation')}</Link></>}
     {action.payload.kind === 'request_item' && <><p>{t('needs.quantity', { value: action.payload.body.quantity })}</p>{action.payload.body.message && <blockquote className="whitespace-pre-wrap break-words text-sm">{action.payload.body.message}</blockquote>}</>}
     {action.payload.kind === 'transition_request' && <div className="space-y-2 text-sm">

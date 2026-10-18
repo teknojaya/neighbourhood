@@ -72,7 +72,7 @@ export const en = {
 
   'nav.home': 'Home',
   'nav.explore': 'Explore',
-  'nav.ask': 'Ask',
+  'nav.ask': 'Start',
   'nav.activity': 'Activity',
   'nav.profile': 'Profile',
 

@@ -15,14 +15,14 @@ import { useRequest, useRequests, useRequestTransition } from './useRequests';
 export function ActivityPage() {
   const [direction, setDirection] = useState<'incoming' | 'outgoing'>('outgoing');
   const [params, setParams] = useSearchParams();
-  const tab = params.has('request') ? 'requests' : params.has('loan') ? 'loans' : params.get('tab') === 'giving' ? 'giving' : params.get('tab') === 'loans' ? 'loans' : 'requests';
+  const tab = params.has('request') ? 'requests' : params.has('loan') ? 'loans' : params.get('tab') === 'requests' ? 'requests' : params.get('tab') === 'loans' ? 'loans' : 'giving';
   const focused = useRequest(params.get('request'));
   const list = useRequests(direction, tab === 'requests');
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
   return (
     <div className="space-y-4">
       <PageHeading title="Activity">Keep track of requests, handovers and the things you share.</PageHeading>
-      <div className="grid grid-cols-3 gap-1 rounded-xl bg-stone-100 p-1" role="group" aria-label="Activity view">{([['requests', 'Requests', ListIcon], ['loans', 'Loans', ExchangeIcon], ['giving', 'Shared items', GiftIcon]] as const).map(([value, label, Icon]) => <button key={value} type="button" aria-pressed={tab === value} className={`flex min-h-16 flex-col items-center justify-center gap-1 rounded-lg px-1 text-sm font-semibold [&_svg]:h-5 [&_svg]:w-5 ${tab === value ? 'bg-white text-brand-800' : 'text-stone-600'}`} onClick={() => setParams({ tab: value })}><Icon />{label}</button>)}</div>
+      <div className="grid grid-cols-3 gap-1 rounded-xl bg-stone-100 p-1" role="group" aria-label="Activity view">{([['giving', 'Shared items', GiftIcon], ['requests', 'Requests', ListIcon], ['loans', 'Loans', ExchangeIcon]] as const).map(([value, label, Icon]) => <button key={value} type="button" aria-pressed={tab === value} className={`flex min-h-16 flex-col items-center justify-center gap-1 rounded-lg px-1 text-sm font-semibold [&_svg]:h-5 [&_svg]:w-5 ${tab === value ? 'bg-white text-brand-800' : 'text-stone-600'}`} onClick={() => setParams({ tab: value })}><Icon />{label}</button>)}</div>
       {tab === 'giving' && <MyListingsPanel />}
       {tab === 'loans' && <LoansPanel />}
       {tab === 'requests' && <>

@@ -62,6 +62,15 @@ actions or neighbours' eligibility. Direct browsing and forms remain available.
 - Ask has private sessions/history, photos, listing drafts, typed action cards,
   confirmation/cancellation/recovery and streamed progress. Saved needs are
   independent of chat deletion.
+- Bottom navigation uses Home, Explore, Start, Activity and Profile. Start opens
+  Ask. Activity opens Shared items by default, followed by Requests and Loans;
+  explicit request/loan links still open the relevant tab. A permanent sharing
+  banner and a navigation bubble open the direct Share form.
+- Notifications group loaded updates into Unread and Read updates, with the
+  global unread count independent of pagination. Opening an unread destination
+  or choosing Mark as read refreshes that count.
+- Publication reviews lead with photos and essential facts, with private pickup
+  details available in a disclosure. Explicit confirmation remains required.
 - Assistant replies stream live. New tasks ask one to four focused questions
   for missing facts, with one question at a time and choices that send immediately. Complete follow-ups
   avoid repeated questions. Photos preview before first send, stay attached to

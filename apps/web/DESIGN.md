@@ -260,9 +260,9 @@ The shared field has a visible associated label, optional described hint, white 
 
 ### Navigation
 
-Five labeled outline-icon tabs retain their order: Home, Explore, Ask, Activity, Profile. Active text/icons are deep green; inactive content is stone and turns green on hover. The white navigation is separated by a top border. Header Messages and Updates utilities expose accessible names containing actual global unread counts; badges appear only for positive counts and cap visual text at **99+**. Read operations refresh those counts. The local-demo pill is environment-specific and hidden below 360px.
+Five labeled outline-icon tabs retain their order: Home, Explore, Start, Activity, Profile. Active text/icons are deep green; inactive content is stone and turns green on hover. The white navigation is separated by a top border. Header Messages and Updates utilities expose accessible names containing actual global unread counts; badges appear only for positive counts and cap visual text at **99+**. Read operations refresh those counts. The local-demo pill is environment-specific and hidden below 360px.
 
-Ask uses a 48px green circle raised 16px above the tab row, with its label below and a soft shadow. It remains a normal link to the Ask route. This gives the agent a clear focal point without introducing another conversation modal.
+Start uses a 48px green circle raised 16px above the tab row, with its label below and a soft shadow. It remains a normal link to the Ask route. This gives the agent a clear focal point without introducing another conversation modal.
 
 ### Conversation composer and dialog
 
@@ -348,7 +348,7 @@ is the supplied connector accent; sky information states distinguish collection
 and active loans, amber denotes waiting/expiry, and all statuses include words
 and a small authored SVG. Existing white/stone surfaces and system type stay.
 
-Activity tabs pair icons with Requests, Loans and Shared items. Product photos
+Activity tabs pair icons with Shared items, Requests and Loans, in that order. Product photos
 lead each record; badges name Awaiting approval, Ready to collect, On loan,
 Returned and other real states. Dates use readable local formatting. Actions
 use verbs such as Approve loan, Confirm collection and Cancel loan, and retain
@@ -356,3 +356,23 @@ explicit confirmation. Request polling pauses outside its tab. Profile starts
 with identity, described navigation rows and a private search-area summary.
 Choose location opens the real authenticated form; Edit profile & preferences
 is a native disclosure. Existing account, location and sign-out behavior remains.
+
+## Start, sharing and review refinements — 2026-10-18
+
+Activity opens Shared items by default while explicit Requests and Loans deep
+links retain their destination. A permanent pale-green Wanna share? banner uses
+a gift icon and one Share an item action, without a close button. A small speech
+bubble above the Activity navigation icon opens Share directly and hides while
+the Share form is open. Both links retain the return destination.
+
+Notifications use compact divided list surfaces grouped into Unread and Read
+updates. Type icons, semantic tints and words distinguish requests, loans,
+deposits and messages. The header uses the global unread total, independent of
+loaded pages. Opening an unread destination marks it read when online; the
+explicit Mark as read control and failure/retry states remain available.
+
+Chat publication reviews lead with an 80px photo and item title, then a two-column
+grid of essential facts. Long descriptions and private pickup details use native
+disclosures. Known enum values receive readable labels; arbitrary user text is
+preserved exactly. Pending reviews keep Confirm visible. Completed reviews
+collapse their details while retaining the receipt and recovery messages.

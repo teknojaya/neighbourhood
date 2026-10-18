@@ -46,7 +46,7 @@ preserve real conversations and recompute committed stock.
   profiles, requests, notifications, saved needs and mapped products.
 - Supplied community image loaded in Home and its detail page without browser
   exceptions; captures are ignored local artifacts under
-  `apps/web/.impeccable/review/seed-catalog`.
+  `artifacts/ui/seed-catalog`.
 
 The browser check first timed out on the existing development server; it passed
 on an isolated API/web instance using the same local data and emulators.

@@ -113,8 +113,8 @@ belong in the subsequent design brief, not this product record.
   workspace reference, not a runtime asset.
 - Current behavior: `../../README.md`, `../../docs/architecture.md`,
   `../../docs/integration-handoff.md`, shared contracts and API services.
-- Saved independent UI critique:
-  `../../.impeccable/critique/2026-10-17T11-36-25Z__apps-web-src-features-ask-askpage-tsx.md`.
+- UI decisions and verification: `../../docs/ui-enhancement-handoff.md` and
+  `DESIGN.md`. Local design-session artifacts are excluded from the repository.
 - Supplied mobile Ask screenshot and local browser evidence document hierarchy
   and navigation problems. They are not a full accessibility audit.
 - Local test evidence is documented in the integration handoff. Real reviews,

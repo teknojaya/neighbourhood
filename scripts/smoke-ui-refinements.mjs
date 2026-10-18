@@ -7,7 +7,7 @@ import { syntheticMapTile } from './map-test-tiles.mjs';
 
 const web = process.env.SMOKE_WEB_URL ?? 'http://localhost:5173';
 assert(['localhost','127.0.0.1'].includes(new URL(web).hostname));
-const out = path.resolve(process.env.UI_SCREENSHOT_DIR ?? 'apps/web/.impeccable/review/refinements');
+const out = path.resolve(process.env.UI_SCREENSHOT_DIR ?? 'artifacts/ui/refinements');
 await fs.mkdir(out,{recursive:true});
 const browser = await chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_CHANNEL ?? 'msedge'});
 const context = await browser.newContext({viewport:{width:440,height:956},reducedMotion:'reduce'});const page=await context.newPage();page.setDefaultTimeout(15000);

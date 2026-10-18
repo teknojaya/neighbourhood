@@ -13,3 +13,7 @@ service-account*.json
 **/playwright-report
 **/test-results
 **/.agents
+**/.impeccable
+artifacts
+neighbourhood-backup.sql
+**/*.dump

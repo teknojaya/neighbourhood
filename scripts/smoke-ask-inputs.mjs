@@ -13,7 +13,7 @@ const base=process.env.SMOKE_API_URL??'http://localhost:8080', web=process.env.S
 assert([base,web,process.env.DATABASE_URL,'http://'+process.env.FIREBASE_AUTH_EMULATOR_HOST,'http://'+process.env.FIREBASE_STORAGE_EMULATOR_HOST].every(value=>['localhost','127.0.0.1','[::1]'].includes(new URL(value).hostname))&&process.env.USE_FIREBASE_EMULATORS==='true');
 const app=initializeApp({projectId:process.env.FIREBASE_PROJECT_ID,storageBucket:process.env.FIREBASE_STORAGE_BUCKET},'ask-inputs-'+randomUUID()),auth=getAuth(app),db=createDb(process.env.DATABASE_URL);
 const uid='ask-inputs-'+randomUUID();let browser,token,userId,phase='setup';
-const out=path.resolve('apps/web/.impeccable/review/ask-inputs');await fs.mkdir(out,{recursive:true});
+const out=path.resolve('artifacts/ui/ask-inputs');await fs.mkdir(out,{recursive:true});
 async function api(route,method='GET',body){const response=await fetch(base+'/api/v1'+route,{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});assert(response.ok,`${phase}: HTTP ${response.status}`);return response.json();}
 try{
  await auth.createUser({uid,email:uid+'@example.test',emailVerified:true});const custom=await auth.createCustomToken(uid);

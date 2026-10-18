@@ -39,6 +39,10 @@ apps/api/.agents/
 uploads/
 apps/api/uploads/
 
-# Local UI captures and interactive design selection payloads
-apps/web/.impeccable/review/
-apps/web/.impeccable/mocks/decision/home-options.json
+# Local design sessions and UI verification output
+.impeccable/
+/artifacts/ui/
+
+# Local database exports (keep SQL migrations tracked)
+/neighbourhood-backup.sql
+*.dump

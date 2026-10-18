@@ -32,4 +32,5 @@ Current evidence and local demo instructions: [integration runbook](integration-
 - Production deployment needs real Firebase/Cloud SQL/Cloud Run credentials;
   SMTP delivery and browser FCM also need configured provider credentials.
   Verify local/emulated operation and document provider configuration honestly.
-- No PR is requested. Keep credentials and local uploaded images out of Git.
+- The integration is reviewed through the PR from `feat/mobile-first-ui` to
+  `main`. Keep credentials, local database exports and local uploads out of Git.

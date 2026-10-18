@@ -41,8 +41,8 @@ repository. The command refuses to delete anything unless a full PostgreSQL
 custom-format backup succeeds. Set `PG_DUMP_PATH` if `pg_dump` is not on PATH.
 
 ```powershell
-$env:PG_DUMP_PATH = 'C:/Program Files/PostgreSQL/17/bin/pg_dump.exe'
-npm run cleanup:photos -w @neighbourhood/api -- --apply --backup-dir D:/local-backups/neighbourhood
+$backupDir = Join-Path (Split-Path (Get-Location).Path -Parent) 'neighbourhood-backups'
+npm run cleanup:photos -w @neighbourhood/api -- --apply --backup-dir $backupDir
 npm run seed:playground -w @neighbourhood/api
 ```
 

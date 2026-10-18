@@ -16,7 +16,7 @@ assert([base, web, process.env.DATABASE_URL, 'http://' + process.env.FIREBASE_AU
 const app = initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID, storageBucket: process.env.FIREBASE_STORAGE_BUCKET }, 'conversation-check-' + randomUUID());
 const auth = getAuth(app), db = createDb(process.env.DATABASE_URL), bucket = getStorage(app).bucket();
 const users = []; let browser, phase = 'setup'; const errors = [];
-const out = path.resolve('apps/web/.impeccable/review/conversations-saved'); await fs.mkdir(out, { recursive: true });
+const out = path.resolve('artifacts/ui/conversations-saved'); await fs.mkdir(out, { recursive: true });
 async function api(who, route, method = 'GET', body, status) {
   const response = await fetch(base + '/api/v1' + route, { method, headers: { Authorization: 'Bearer ' + who.token, 'Idempotency-Key': randomUUID(), 'Content-Type': Buffer.isBuffer(body) ? 'image/jpeg' : 'application/json' }, body: body === undefined ? undefined : Buffer.isBuffer(body) ? body : JSON.stringify(body), signal: AbortSignal.timeout(30000) });
   assert(status ? response.status === status : response.ok, `${phase}: HTTP ${response.status}`);

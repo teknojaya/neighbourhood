@@ -146,7 +146,7 @@ components:
 
 NeighbourHood uses its incumbent green identity, warm stone ground, white surfaces and system UI typography to make local inventory and the next action easy to read. This is the implemented visual system for the resident and volunteer web app, recorded after the approved enhancement. It preserves the existing identity rather than introducing a new art direction.
 
-The interface is compact but gives controls and supporting copy room. Actual item photos provide visual detail; absent or broken photos receive an honest outline-icon fallback. Browsing expands on wider screens while forms and conversations retain a readable measure. The approved surface composition remains in `.impeccable/surfaces/src-app-tsx.md`; this document records reusable visual rules rather than prescribing Home's layout for every route.
+The interface is compact but gives controls and supporting copy room. Actual item photos provide visual detail; absent or broken photos receive an honest outline-icon fallback. Browsing expands on wider screens while forms and conversations retain a readable measure. The Home composition is implemented in `apps/web/src/features/home/HomePage.tsx`; this document records reusable visual rules rather than prescribing that layout for every route.
 
 **Key Characteristics:**
 

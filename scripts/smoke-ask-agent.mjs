@@ -16,7 +16,7 @@ assert([base, web, process.env.DATABASE_URL].every(value => ['localhost','127.0.
 const app = initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID, storageBucket: process.env.FIREBASE_STORAGE_BUCKET }, 'ask-agent-' + randomUUID());
 const auth = getAuth(app), db = createDb(process.env.DATABASE_URL), bucket = getStorage(app).bucket(process.env.FIREBASE_STORAGE_BUCKET);
 const uid = 'ask-agent-' + randomUUID(); let browser, token; let phase = 'setup'; let streams = 0, upstreamRetries = 0;
-const out = path.resolve('apps/web/.impeccable/review/ask-agent'); await fs.mkdir(out, { recursive: true });
+const out = path.resolve('artifacts/ui/ask-agent'); await fs.mkdir(out, { recursive: true });
 async function api(route, method = 'GET', body) { const response = await fetch(base + '/api/v1' + route, { method, headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) }); assert(response.ok, `HTTP ${response.status}`); return response.status === 204 ? null : response.json(); }
 try {
   await auth.createUser({ uid, email: uid + '@example.test', emailVerified: true }); const custom = await auth.createCustomToken(uid);

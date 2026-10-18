@@ -25,5 +25,5 @@ Confirm; completed action details collapse without hiding their receipts.
   message/notification read updates.
 
 Browser captures are local ignored artifacts under
-`apps/web/.impeccable/review/start-updates`. These checks use typed action
+`artifacts/ui/start-updates`. These checks use typed action
 fixtures and do not claim live model or production provider verification.

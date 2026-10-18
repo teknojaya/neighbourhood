@@ -71,7 +71,7 @@ Q&A through normal chat, a photographed draft, an approval card before any
 listing exists, confirmation, bucket photo copying, reload, streamed partial
 text, clothing discovery and collapsible history without stale radius prompts.
 It removes its own account, records and objects.
-Browser captures are ignored under `apps/web/.impeccable/review/ask-agent`.
+Browser captures are ignored under `artifacts/ui/ask-agent`.
 Map tiles are intercepted with labelled synthetic tiles. Native camera picker
 behavior still needs a physical-device check; the harness exercises file input.
 

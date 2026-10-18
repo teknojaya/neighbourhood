@@ -16,7 +16,7 @@ assert(process.env.USE_FIREBASE_EMULATORS === 'true' && process.env.FIREBASE_PRO
 const app = initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID }, 'ui-unread-' + randomUUID());
 const auth = getAuth(app), db = createDb(process.env.DATABASE_URL), users = [];
 let browser; let phase = 'setup';
-const out = path.resolve(process.env.UI_SCREENSHOT_DIR ?? 'apps/web/.impeccable/review');
+const out = path.resolve(process.env.UI_SCREENSHOT_DIR ?? 'artifacts/ui');
 async function api(who, route, method = 'GET', body) {
   const response = await fetch(new URL('/api/v1' + route, base), { method, headers: { Authorization: 'Bearer ' + who.token, 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID() }, body: body ? JSON.stringify(body) : undefined });
   assert(response.ok, `${route}: HTTP ${response.status}`); return response.status === 204 ? null : response.json();

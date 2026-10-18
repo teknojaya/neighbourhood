@@ -65,7 +65,7 @@ The final full marketplace smoke also passed after the review fixes, including s
 
 ## Impeccable finish review
 
-An independent reviewer loaded the installed Impeccable 4.6.0 role in a fresh agent context and reviewed the approved structure, captures and source. Its initial disposition was `fix` for two workflow omissions: Share draft/origin recovery and genuine unread signaling. The verdict pass scored both fixes **resolved** and returned `ship` for those two fixes; this is not a certification of every device, permission state or role combination. The detailed review/capture evidence is retained locally under `apps/web/.impeccable/review/` and ignored by Git. The documented system is in `apps/web/DESIGN.md` and `apps/web/.impeccable/design.json`.
+An independent reviewer loaded the installed Impeccable 4.6.0 role in a fresh agent context and reviewed the approved structure, captures and source. Its initial disposition was `fix` for two workflow omissions: Share draft/origin recovery and genuine unread signaling. The verdict pass scored both fixes **resolved** and returned `ship` for those two fixes; this is not a certification of every device, permission state or role combination. The detailed review/capture evidence is retained locally under `artifacts/ui/` and ignored by Git. The documented system is in `apps/web/DESIGN.md`.
 
 ## Limits
 

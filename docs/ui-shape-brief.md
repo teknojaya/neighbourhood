@@ -55,10 +55,11 @@ should carry the chosen offering mode into Explore.
 Free means donated items to keep; Borrow means items to return. Label both in
 plain language and do not suggest lending is currently available until dates
 are checked. Use actual item photos and a compact, honest no-photo fallback.
-The selected planning sketch is
-`../apps/web/.impeccable/mocks/decision/home-nearby-mode-grid.html`.
-Sketches use synthetic example content and do not claim real stock. This choice
-confirms composition, not every illustration, value or control in the sketch.
+The implemented composition is in
+`apps/web/src/features/home/HomePage.tsx`, with reusable rules in
+`apps/web/DESIGN.md`. Local planning sketches are excluded from the repository;
+their example content did not claim real stock. The composition choice does not
+confirm every illustration, value or control in those sketches.
 Concept choice does not authorize app-source implementation by itself.
 
 ## 3. Complete surface plan

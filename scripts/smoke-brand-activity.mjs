@@ -11,7 +11,7 @@ import { removePhotoFixtures } from './photo-fixtures.mjs';
 const base = process.env.SMOKE_API_URL ?? 'http://localhost:8080', web = process.env.SMOKE_WEB_URL ?? 'http://localhost:5173';
 assert([base, web, process.env.DATABASE_URL, 'http://' + process.env.FIREBASE_AUTH_EMULATOR_HOST].every(value => ['localhost','127.0.0.1','[::1]'].includes(new URL(value).hostname)) && process.env.USE_FIREBASE_EMULATORS === 'true');
 const app = initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID }), auth = getAuth(app), db = createDb(process.env.DATABASE_URL);
-const out = path.resolve('apps/web/.impeccable/review/brand-activity'); await fs.mkdir(out,{recursive:true});
+const out = path.resolve('artifacts/ui/brand-activity'); await fs.mkdir(out,{recursive:true});
 let browser, fixtureId, phase = 'setup'; const uid = 'photo-policy-' + randomUUID();
 async function signIn(uid) {
   const custom = await auth.createCustomToken(uid);

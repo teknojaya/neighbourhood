@@ -17,7 +17,7 @@ datasource db {
 // ------------------------------------------------------------------ enums
 enum PlatformRole {
   staff
-  medicine_partner
+  product_category_editor
 }
 
 enum CommunityRole {
@@ -115,19 +115,6 @@ enum PointKind {
   partner_desk
 }
 
-enum MedicineCaseStatus {
-  submitted
-  under_review
-  referred
-  closed
-  withdrawn
-}
-
-enum ContactPreference {
-  in_app
-  phone
-}
-
 // ------------------------------------------------------------- identity
 /// One row per person. Created on first verified sign-in (Google or email OTP).
 /// `email` is stored lower-cased and is unique: the same email can never
@@ -159,14 +146,15 @@ model User {
   loansLent         Loan[]      @relation("Lender")
   conversations     ConversationParticipant[]
   messages          Message[]
+  conversationAttachments ConversationAttachment[]
+  savedListings     SavedListing[]
   notifications     Notification[]
   pushTokens        PushToken[]
   needs             Need[]
+  askSessions       AskSession[]
   deposits          Deposit[]   @relation("Donor")
   depositsReviewed  Deposit[]   @relation("Reviewer")
   stockAdjustments  StockAdjustment[]
-  medicineCases     MedicineCase[]
-  partnerMemberships PartnerOrganizationMember[]
   idempotencyKeys   IdempotencyKey[]
 
   @@map("users")
@@ -261,6 +249,7 @@ model CommunityPoint {
 }
 
 model PointInventoryItem {
+  listing Listing?
   id         String       @id @default(uuid()) @db.Uuid
   pointId    String       @map("point_id") @db.Uuid
   category   ItemCategory
@@ -318,6 +307,8 @@ model StockAdjustment {
 
 // ------------------------------------------------------------- listings
 model Listing {
+  pointInventoryItemId String? @unique @map("point_inventory_item_id") @db.Uuid
+  pointInventoryItem PointInventoryItem? @relation(fields: [pointInventoryItemId], references: [id], onDelete: SetNull)
   id               String           @id @default(uuid()) @db.Uuid
   ownerId          String           @map("owner_id") @db.Uuid
   status           ListingStatus    @default(draft)
@@ -350,6 +341,7 @@ model Listing {
   photos           ListingPhoto[]
   requests         DonationRequest[]
   loans            Loan[]
+  savedBy          SavedListing[]
 
   @@index([status, geohash])
   @@index([ownerId, updatedAt])
@@ -440,6 +432,7 @@ model Conversation {
   loan              Loan?     @relation(fields: [loanId], references: [id], onDelete: Cascade)
   participants      ConversationParticipant[]
   messages          Message[]
+  attachments       ConversationAttachment[]
 
   @@map("conversations")
 }
@@ -464,13 +457,51 @@ model Message {
   createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender         User         @relation(fields: [senderId], references: [id])
+  attachments    ConversationAttachment[]
 
   @@index([conversationId, createdAt(sort: Desc), id(sort: Desc)])
   @@map("messages")
 }
 
+model ConversationAttachment {
+  id             String @id @default(uuid()) @db.Uuid
+  conversationId String @map("conversation_id") @db.Uuid
+  uploaderId     String @map("uploader_id") @db.Uuid
+  messageId      String? @map("message_id") @db.Uuid
+  storagePath    String @unique @map("storage_path") @db.VarChar(300)
+  mimeType       String @map("mime_type") @db.VarChar(40)
+  size           Int
+  uploadKey      String @map("upload_key") @db.VarChar(128)
+  sourceHash     String @map("source_hash") @db.VarChar(64)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  uploader       User @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  message        Message? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  @@unique([conversationId, uploaderId, uploadKey], map: "conversation_attachments_conversation_id_uploader_id_upload_key")
+  @@index([messageId])
+  @@index([conversationId, uploaderId, createdAt], map: "conversation_attachments_conversation_id_uploader_id_created_at")
+  @@map("conversation_attachments")
+}
+
+model SavedListing {
+  id        String @id @default(uuid()) @db.Uuid
+  userId    String @map("user_id") @db.Uuid
+  listingId String @map("listing_id") @db.Uuid
+  title     String @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  @@unique([userId, listingId])
+  @@index([userId, createdAt, id])
+  @@map("saved_listings")
+}
+
 // -------------------------------------------------------- notifications
 model Notification {
+  pushSentAt DateTime? @map("push_sent_at") @db.Timestamptz(3)
+  pushStartedAt DateTime? @map("push_started_at") @db.Timestamptz(3)
+  pushAttempts Int @default(0) @map("push_attempts")
+  nextPushAt DateTime @default(now()) @map("next_push_at") @db.Timestamptz(3)
   id        String    @id @default(uuid()) @db.Uuid
   userId    String    @map("user_id") @db.Uuid
   type      String    @db.VarChar(40)
@@ -512,46 +543,6 @@ model Need {
   @@map("needs")
 }
 
-// -------------------------------------------- medicine assistance (private)
-model PartnerOrganization {
-  id         String    @id @default(uuid()) @db.Uuid
-  name       String    @db.VarChar(120)
-  verifiedAt DateTime? @map("verified_at") @db.Timestamptz(3)
-  members    PartnerOrganizationMember[]
-  cases      MedicineCase[]
-
-  @@map("partner_organizations")
-}
-
-model PartnerOrganizationMember {
-  orgId  String              @map("org_id") @db.Uuid
-  userId String              @map("user_id") @db.Uuid
-  org    PartnerOrganization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  user   User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@id([orgId, userId])
-  @@map("partner_organization_members")
-}
-
-model MedicineCase {
-  id               String             @id @default(uuid()) @db.Uuid
-  requesterId      String             @map("requester_id") @db.Uuid
-  status           MedicineCaseStatus @default(submitted)
-  partnerOrgId     String?            @map("partner_org_id") @db.Uuid
-  /// Private: never logged, never sent to AI.
-  summary          String             @db.VarChar(1000)
-  hasPrescription  Boolean?           @map("has_prescription")
-  preferredContact ContactPreference  @map("preferred_contact")
-  consentedAt      DateTime           @map("consented_at") @db.Timestamptz(3)
-  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt        DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
-  requester        User               @relation(fields: [requesterId], references: [id])
-  partnerOrg       PartnerOrganization? @relation(fields: [partnerOrgId], references: [id])
-
-  @@index([partnerOrgId, status, createdAt])
-  @@map("medicine_cases")
-}
-
 // ---------------------------------------------------------- idempotency
 /// Stored result of a mutation keyed by (user, Idempotency-Key). Purge > 24 h.
 model IdempotencyKey {
@@ -566,4 +557,103 @@ model IdempotencyKey {
   @@id([userId, key])
   @@index([createdAt])
   @@map("idempotency_keys")
+}
+
+// AI conversations are separate from neighbour-to-neighbour conversations.
+model AskSession {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  clientId     String   @map("client_id") @db.Uuid
+  title        String   @default("New chat") @db.VarChar(80)
+  nextSequence Int      @default(0) @map("next_sequence")
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(3)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user         User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages     AskMessage[]
+  runs         AskRun[]
+  attachments  AskAttachment[]
+  actions      AskAction[]
+  drafts       AskDraft[]
+  @@unique([userId, clientId])
+  @@index([userId, updatedAt])
+  @@map("ask_sessions")
+}
+
+model AskMessage {
+  id         String @id @default(uuid()) @db.Uuid
+  sessionId  String @map("session_id") @db.Uuid
+  sequence   Int
+  role       String @db.VarChar(12)
+  text       String @default("")
+  parts      Json @default("[]")
+  attachmentIds String[] @default([]) @map("attachment_ids") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  session    AskSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  @@unique([sessionId, sequence])
+  @@map("ask_messages")
+}
+
+model AskRun {
+  progress String @default("thinking") @db.VarChar(30)
+  partialText String @default("") @map("partial_text") @db.Text
+  id              String @id @default(uuid()) @db.Uuid
+  sessionId       String @map("session_id") @db.Uuid
+  clientMessageId String @map("client_message_id") @db.Uuid
+  requestHash     String @map("request_hash") @db.VarChar(64)
+  attemptId       String @default(uuid()) @map("attempt_id") @db.Uuid
+  status          String @default("running") @db.VarChar(12)
+  errorCode       String? @map("error_code") @db.VarChar(40)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  startedAt       DateTime @default(now()) @map("started_at") @db.Timestamptz(3)
+  session         AskSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  @@unique([sessionId, clientMessageId])
+  @@index([sessionId, createdAt])
+  @@map("ask_runs")
+}
+
+model AskAttachment {
+  id          String @id @default(uuid()) @db.Uuid
+  sessionId   String @map("session_id") @db.Uuid
+  storagePath String @unique @map("storage_path") @db.VarChar(300)
+  name        String @db.VarChar(120)
+  mimeType    String @map("mime_type") @db.VarChar(40)
+  size        Int
+  uploadKey   String? @map("upload_key") @db.VarChar(128)
+  sourceHash  String? @map("source_hash") @db.VarChar(64)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  session     AskSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  @@index([sessionId])
+  @@unique([sessionId, uploadKey])
+  @@map("ask_attachments")
+}
+
+model AskAction {
+  firstStartedAt DateTime? @map("first_started_at") @db.Timestamptz(3)
+  id          String @id @default(uuid()) @db.Uuid
+  sessionId   String @map("session_id") @db.Uuid
+  runId       String @map("run_id") @db.Uuid
+  payload     Json
+  summary     String @db.VarChar(300)
+  revision    Int @default(0)
+  status      String @default("pending") @db.VarChar(12)
+  errorCode   String? @map("error_code") @db.VarChar(40)
+  receipt     Json?
+  expiresAt   DateTime @map("expires_at") @db.Timestamptz(3)
+  startedAt   DateTime? @map("started_at") @db.Timestamptz(3)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  session     AskSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  @@index([sessionId])
+  @@map("ask_actions")
+}
+
+model AskDraft {
+  id        String @id @default(uuid()) @db.Uuid
+  sessionId String @map("session_id") @db.Uuid
+  kind      String @db.VarChar(20)
+  data      Json
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  session   AskSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  @@unique([sessionId, kind])
+  @@map("ask_drafts")
 }

@@ -15,3 +15,25 @@ export const ListIcon = () => (
 export const UserIcon = () => (
   <svg {...base}><circle cx="12" cy="8" r="4" /><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" /></svg>
 );
+export const PlusIcon = () => <svg {...base}><path d="M12 5v14M5 12h14" /></svg>;
+export const ArrowIcon = () => <svg {...base}><path d="M5 12h14m-6-6 6 6-6 6" /></svg>;
+export const PinIcon = () => <svg {...base}><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z" /><circle cx="12" cy="10" r="2" /></svg>;
+export const BoxIcon = () => <svg {...base}><path d="m3 7 9-4 9 4v10l-9 4-9-4Z" /><path d="m3 7 9 4 9-4M12 11v10M7 5l9 4" /></svg>;
+export const ChatIcon = () => <svg {...base}><path d="M21 11a8 8 0 0 1-8 8H7l-4 3V11a9 9 0 0 1 18 0Z" /><path d="M8 10h8M8 14h5" /></svg>;
+export const BellIcon = () => <svg {...base}><path d="M5 10a7 7 0 0 1 14 0c0 5 2 6 2 6H3s2-1 2-6M9 20h6" /></svg>;
+export const CloseIcon = () => <svg {...base}><path d="m6 6 12 12M6 18 18 6" /></svg>;
+export const HistoryIcon = () => <svg {...base}><path d="M3 11a9 9 0 1 1 2.7 7M3 5v6h6M12 7v5l3 2" /></svg>;
+export const BookmarkIcon = () => <svg {...base}><path d="M6 3h12v18l-6-4-6 4Z" /></svg>;
+export const CameraIcon = () => <svg {...base}><path d="m8 5 2-2h4l2 2h4v15H4V5Z" /><circle cx="12" cy="12" r="4" /></svg>;
+export const ImageIcon = () => <svg {...base}><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8" cy="8" r="1.5" /><path d="m3 17 5-5 4 4 4-6 5 7" /></svg>;
+export const SendIcon = () => <svg {...base}><path d="m21 3-7 18-4-7-7-4 18-7ZM10 14 21 3" /></svg>;
+export const TrashIcon = () => <svg {...base}><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" /></svg>;
+export const MapIcon = () => <svg {...base}><path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2ZM9 3v16M15 5v16" /></svg>;
+export const ChevronDownIcon = () => <svg {...base}><path d="m6 9 6 6 6-6" /></svg>;
+export const ChevronLeftIcon = () => <svg {...base}><path d="m15 6-6 6 6 6" /></svg>;
+export const CheckIcon = () => <svg {...base}><path d="m5 12 4 4L19 6" /></svg>;
+export const ClockIcon = () => <svg {...base}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>;
+export const ExchangeIcon = () => <svg {...base}><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4" /></svg>;
+export const GiftIcon = () => <svg {...base}><path d="M4 10h16v11H4ZM3 6h18v4H3ZM12 6v15" /><path d="M12 6H8a2.5 2.5 0 1 1 2.4-3.2L12 6Zm0 0h4a2.5 2.5 0 1 0-2.4-3.2L12 6Z" /></svg>;
+export const CalendarIcon = () => <svg {...base}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M7 3v4M17 3v4M3 11h18" /></svg>;
+export const ChevronRightIcon = () => <svg {...base}><path d="m9 6 6 6-6 6" /></svg>;

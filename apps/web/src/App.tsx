@@ -7,9 +7,13 @@ import { LoginPage } from './features/auth/AuthPages';
 import { CommunitiesPage } from './features/communities/CommunitiesPage';
 import { HomePage } from './features/home/HomePage';
 import { ExplorePage } from './features/listings/ExplorePage';
-import { MedicinePage } from './features/medicine/MedicinePage';
+import { ProductCategoriesPage } from './features/categories/ProductCategoriesPage';
+import { ListingDetailPage } from './features/listings/ListingDetailPage';
+import { SharePage } from './features/listings/SharePage';
+import { SavedItemsPage } from './features/listings/SavedItemsPage';
 import { MessagesPage } from './features/messages/MessagesPage';
-import { NeedsAssistantPage } from './features/needs/NeedsAssistantPage';
+import { AskPage } from './features/ask/AskPage';
+import { SavedNeedsPage } from './features/needs/SavedNeedsPage';
 import { NotificationsPage } from './features/notifications/NotificationsPage';
 import { ProfilePage } from './features/profile/ProfilePage';
 import { t } from './i18n';
@@ -30,13 +34,17 @@ const router = createBrowserRouter([
         element: <Layout />,
         children: [
           { index: true, element: <HomePage /> },
-          { path: 'needs', element: <NeedsAssistantPage /> },
+          { path: 'needs', element: <AskPage /> },
+          { path: 'needs/saved', element: <SavedNeedsPage /> },
           { path: 'explore', element: <ExplorePage /> },
+          { path: 'listings/:id', element: <ListingDetailPage /> },
+          { path: 'share', element: <SharePage /> },
+          { path: 'saved-items', element: <SavedItemsPage /> },
           { path: 'activity', element: <ActivityPage /> },
           { path: 'communities', element: <CommunitiesPage /> },
           { path: 'messages', element: <MessagesPage /> },
           { path: 'notifications', element: <NotificationsPage /> },
-          { path: 'medicine', element: <MedicinePage /> },
+          { path: 'categories', element: <ProductCategoriesPage /> },
           { path: 'profile', element: <ProfilePage /> },
         ],
       },

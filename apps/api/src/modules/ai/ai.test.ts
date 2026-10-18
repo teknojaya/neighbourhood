@@ -1,8 +1,9 @@
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
+import { FinishReason } from '@google/genai';
 import { AI_LIMITS, NeedsExtractionSchema } from '@neighbourhood/shared';
 import { bearer, buildTestApp, FakeGenerator } from '../../test/fakes.js';
-import { GeminiAdapter, type InteractionsClient, mapGeminiError } from './gemini.adapter.js';
+import { GeminiAdapter, type JsonModelClient, mapGeminiError, geminiOutputSchema } from './gemini.adapter.js';
 import { buildNeedsInput, NEEDS_JSON_SCHEMA } from './needs.prompt.js';
 
 const validExtraction = {
@@ -78,35 +79,39 @@ describe('POST /ai/needs/extract', () => {
     await request(app).post('/api/v1/ai/needs/extract').send({ text: 'need a stroller' }).expect(401);
   });
 
-  it('does not offer unimplemented AI features as working', async () => {
+  it('validates photo/match inputs and reports missing integrations honestly', async () => {
     const { app } = buildTestApp({ generator: new FakeGenerator(() => validExtraction) });
-    await request(app).post('/api/v1/ai/listing-draft').set('Authorization', bearer('alice')).send({}).expect(501);
-    await request(app).post('/api/v1/ai/match-explanations').set('Authorization', bearer('alice')).send({}).expect(501);
+    await request(app).post('/api/v1/ai/listing-draft').set('Authorization', bearer('alice')).send({}).expect(400);
+    await request(app).post('/api/v1/ai/listing-draft').set('Authorization', bearer('alice')).send({ sessionId: '11111111-1111-4111-8111-111111111111', attachmentId: '22222222-2222-4222-8222-222222222222' }).expect(503);
+    await request(app).post('/api/v1/ai/match-explanations').set('Authorization', bearer('alice')).send({ needId: '33333333-3333-4333-8333-333333333333' }).expect(503);
   });
 });
 
 describe('Gemini adapter', () => {
-  const fakeClient = (impl: InteractionsClient['create']): InteractionsClient => ({ create: impl });
+  it('keeps output validation bounds local without mutating shared schemas', () => {
+    const schema = { type: 'object', properties: { items: { type: 'array', maxItems: 10, items: { type: 'integer', minimum: 1 } } } };
+    expect(geminiOutputSchema(schema)).toEqual({ type: 'object', properties: { items: { type: 'array', items: { type: 'integer', minimum: 1 } } } });
+    expect(schema.properties.items.maxItems).toBe(10);
+  });
+  const fakeClient = (impl: JsonModelClient['generateContent']): JsonModelClient => ({ generateContent: impl });
   const req = { task: 't', systemInstruction: 's', input: 'i', jsonSchema: {}, maxOutputTokens: 100, timeoutMs: 1000 };
 
   it('sends structured-output parameters and parses JSON text', async () => {
-    let seen: Parameters<InteractionsClient['create']> | undefined;
+    let seen: Parameters<JsonModelClient['generateContent']> | undefined;
     const adapter = new GeminiAdapter('gemini-test', 'k', fakeClient(async (...args) => {
       seen = args;
-      return { status: 'completed', output_text: '{"a":1}' };
+      return { text: '{"a":1}' };
     }));
     await expect(adapter.generateJson(req)).resolves.toEqual({ a: 1 });
     expect(seen![0]).toMatchObject({
       model: 'gemini-test',
-      response_format: { type: 'text', mime_type: 'application/json' },
-      generation_config: { max_output_tokens: 100 },
-      store: false,
+      config: { responseMimeType: 'application/json', responseJsonSchema: {}, maxOutputTokens: 100 },
     });
-    expect(seen![1].timeout_ms).toBe(1000);
+    expect(seen![0].config?.abortSignal).toBeInstanceOf(AbortSignal);
   });
 
   it('maps malformed, empty and incomplete responses to AI_INVALID_OUTPUT', async () => {
-    for (const resp of [{ status: 'completed', output_text: '{oops' }, { status: 'completed' }, { status: 'incomplete', output_text: '{}' }]) {
+    for (const resp of [{ text: '{oops' }, { text: undefined }, { text: '{}', candidates: [{ finishReason: FinishReason.MAX_TOKENS }] }]) {
       const adapter = new GeminiAdapter('m', 'k', fakeClient(async () => resp));
       await expect(adapter.generateJson(req)).rejects.toMatchObject({ code: 'AI_INVALID_OUTPUT' });
     }

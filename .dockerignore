@@ -8,3 +8,12 @@
 *.log
 service-account*.json
 .git
+**/uploads
+**/coverage
+**/playwright-report
+**/test-results
+**/.agents
+**/.impeccable
+artifacts
+neighbourhood-backup.sql
+**/*.dump

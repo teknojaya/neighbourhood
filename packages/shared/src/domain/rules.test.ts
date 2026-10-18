@@ -33,6 +33,7 @@ describe('loan date rules', () => {
   it('treats an overdue checked-out loan as blocking until returned', () => {
     const overdue = { id: 'o', status: 'checked_out' as const, startDate: '2026-11-01', endDate: '2026-11-03' };
     expect(() => assertNoConflictingLoan({ id: 'n', startDate: '2026-11-08', endDate: '2026-11-09' }, [overdue], '2026-11-08')).toThrow();
+    expect(() => assertNoConflictingLoan({ id: 'n', startDate: '2026-12-01', endDate: '2026-12-02' }, [overdue], '2026-11-08')).toThrow();
   });
   it('derives overdue from the due date', () => {
     const loan = { status: 'checked_out' as const, endDate: '2026-11-03' };

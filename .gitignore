@@ -20,6 +20,7 @@ service-account*.json
 application_default_credentials.json
 *.pem
 *.key
+playground-accounts.local.json
 
 # Generated Prisma client (run `npm run prisma:generate -w @neighbourhood/api`)
 apps/api/src/generated/
@@ -33,3 +34,15 @@ storage-debug.log
 
 # Prisma CLI agent-skill docs (vendor-generated)
 apps/api/.agents/
+
+# Local file storage uploads
+uploads/
+apps/api/uploads/
+
+# Local design sessions and UI verification output
+.impeccable/
+/artifacts/ui/
+
+# Local database exports (keep SQL migrations tracked)
+/neighbourhood-backup.sql
+*.dump

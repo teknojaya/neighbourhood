@@ -30,7 +30,7 @@ describe('NeedsExtractionSchema', () => {
     expect(NeedsExtractionSchema.safeParse(valid).success).toBe(true);
   });
   it('rejects invented categories, bad dates and oversize arrays', () => {
-    expect(NeedsExtractionSchema.safeParse({ ...valid, items: [{ ...valid.items[0], category: 'medicine' }] }).success).toBe(false);
+    expect(NeedsExtractionSchema.safeParse({ ...valid, items: [{ ...valid.items[0], category: 'unrecognised_category' }] }).success).toBe(false);
     expect(NeedsExtractionSchema.safeParse({ ...valid, timing: { ...valid.timing, neededBy: 'next week' } }).success).toBe(false);
     expect(NeedsExtractionSchema.safeParse({ ...valid, clarificationQuestions: Array(6).fill('q?') }).success).toBe(false);
   });

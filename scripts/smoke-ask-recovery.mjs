@@ -1,0 +1,43 @@
+import { publishPhotoFixture, removePhotoFixtures } from './photo-fixtures.mjs';
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { initializeApp, deleteApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { chromium } from 'playwright';
+import { createDb } from '../apps/api/src/lib/db.ts';
+import { actionDto } from '../apps/api/src/modules/ask/ask.dto.ts';
+import { stubMapTiles } from './map-test-tiles.mjs';
+/* global document, innerWidth */
+const base=process.env.SMOKE_API_URL??'http://localhost:8080', web=process.env.SMOKE_WEB_URL??'http://localhost:5173';
+assert([base,web,process.env.DATABASE_URL,'http://'+process.env.FIREBASE_AUTH_EMULATOR_HOST].every(value=>['localhost','127.0.0.1','[::1]'].includes(new URL(value).hostname))&&process.env.USE_FIREBASE_EMULATORS==='true');
+const app=initializeApp({projectId:process.env.FIREBASE_PROJECT_ID}),auth=getAuth(app),db=createDb(process.env.DATABASE_URL);
+const users=[];let browser,phase='setup';const out=path.resolve('artifacts/ui/ask-recovery');await fs.mkdir(out,{recursive:true});
+async function api(who,route,method='GET',body){const response=await fetch(base+'/api/v1'+route,{method,headers:{Authorization:'Bearer '+who.token,'Content-Type':'application/json','Idempotency-Key':randomUUID()},body:body===undefined?undefined:JSON.stringify(body)});assert(response.ok,`${phase}: HTTP ${response.status}`);return response.status===204?null:response.json();}
+async function user(){const who={uid:'ask-recovery-'+randomUUID()};users.push(who);await auth.createUser({uid:who.uid,email:who.uid+'@example.test',emailVerified:true});who.custom=await auth.createCustomToken(who.uid);const response=await fetch(`http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=local-test`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:who.custom,returnSecureToken:true})});assert(response.ok);who.token=(await response.json()).idToken;who.id=(await api(who,'/me')).userId;return who;}
+async function shot(page,name){assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:path.join(out,name+'.png'),fullPage:true});}
+try{
+ const owner=await user(),neighbour=await user();const listingBody={mode:'donate',category:'clothing',title:'Cotton jackets',description:'Fixture clothing',condition:'good',quantity:3,areaLabel:'Jakarta Pusat',exactLocation:{lat:-6.1905,lng:106.8173},pickupInstructions:'Agree pickup privately',collection:{method:'owner_location',communityPointId:null}};
+ const listing=await publishPhotoFixture(base,owner,await api(owner,'/listings','POST',listingBody),'cotton-clothing'),second=await publishPhotoFixture(base,owner,await api(owner,'/listings','POST',listingBody),'cotton-clothing');
+ const existing=await api(neighbour,'/requests','POST',{listingId:listing.id,quantity:1,message:'Could I collect a jacket?'});
+ const session=await api(neighbour,'/ask/sessions','POST',{clientId:randomUUID()});
+ const oldAction=await db.askAction.create({data:{sessionId:session.id,runId:randomUUID(),status:'cancelled',errorCode:'CONFLICT',summary:listing.title,payload:{kind:'request_item',body:{listingId:listing.id,quantity:1,message:''}},expiresAt:new Date(Date.now()+600000)}});
+ await db.askMessage.create({data:{sessionId:session.id,sequence:0,role:'user',text:'I need to borrow clothes'}});
+ await db.askMessage.create({data:{sessionId:session.id,sequence:1,role:'assistant',text:'Request the free items, or widen the borrowing search?\nServer cards: [{"kind":"marketplace_confirmation","attachmentIds":["internal"]}]',parts:[{kind:'listings',items:[],search:{radiusKm:3,broaderRadiusKm:50,fartherItems:[],mode:'lend',category:'clothing'}},{kind:'listings',items:[listing,second],search:{radiusKm:3,broaderRadiusKm:null,fartherItems:[],mode:'donate',category:'clothing'}},{kind:'action',action:actionDto(oldAction)}]}});
+ await db.askSession.update({where:{id:session.id},data:{nextSequence:2}});
+ browser=await chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_CHANNEL??'msedge'});const context=await browser.newContext({viewport:{width:440,height:956},reducedMotion:'reduce'});await stubMapTiles(context);const page=await context.newPage();page.setDefaultTimeout(20000);const errors=[];page.on('pageerror',error=>errors.push(error.message));
+ let outage=false,failRead=false,reads=0;
+ await page.route('**/api/v1/**',async route=>{const source=new URL(route.request().url());const conversationPath='/api/v1/conversations/'+existing.conversationId;
+  if(outage&&source.pathname===conversationPath&&route.request().method()==='GET')return route.fulfill({status:502,contentType:'text/plain',body:'Temporary test gateway failure'});
+  if(source.pathname===conversationPath+'/read'){reads++;if(failRead){failRead=false;return route.fulfill({status:502,contentType:'text/plain',body:'Temporary test gateway failure'});}}
+  const response=await route.fetch({url:new URL(source.pathname+source.search,base).href});await route.fulfill({response});
+ });
+ await page.goto(web+'/login');await page.evaluate(async custom=>{const{getFirebaseAuth}=await import('/src/lib/firebase.ts');const{signInWithCustomToken}=await import('/node_modules/.vite/deps/firebase_auth.js');await signInWithCustomToken(getFirebaseAuth(),custom);},neighbour.custom);await page.waitForURL(url=>url.pathname==='/');
+ phase='historical cards and truthful scopes';await page.goto(web+'/needs?chat='+session.id);await page.getByText('This duplicate action was not submitted.',{exact:false}).waitFor();assert.equal(await page.getByText('Server cards:',{exact:false}).count(),0);assert.equal(await page.getByText('How far would you like to search?',{exact:true}).count(),0);await page.locator('summary',{hasText:'Borrow within 3 km'}).waitFor();await page.locator('summary',{hasText:'Free to keep within 3 km'}).waitFor();await shot(page,'history-mobile');await page.setViewportSize({width:1440,height:900});await shot(page,'history-desktop');await page.setViewportSize({width:440,height:956});
+ phase='ambiguous affirmative';const composer=page.getByLabel('Message NeighbourHood',{exact:true});await composer.fill('yess please');await page.getByRole('button',{name:'Send',exact:true}).click();await page.getByText('Did you mean the free items, or are you still looking to borrow?',{exact:true}).waitFor();assert.equal(await db.askAction.count({where:{sessionId:session.id,status:'pending'}}),0);await shot(page,'clarification-mobile');
+ phase='temporary detail outage';outage=true;await page.goto(web+'/messages?conversation='+existing.conversationId);await page.getByRole('button',{name:'Try again',exact:true}).first().waitFor();assert.equal(reads,0,'Read markers must wait for conversation authorization/detail');await shot(page,'conversation-outage-mobile');
+ phase='conversation and read recovery';outage=false;failRead=true;await page.getByRole('button',{name:'Try again',exact:true}).first().click();await page.getByRole('heading',{name:'Cotton jackets',exact:true}).waitFor();await page.getByText('Could not mark messages as read.',{exact:false}).waitFor();await page.getByRole('button',{name:'Try again',exact:true}).click();await page.getByText('Could not mark messages as read.',{exact:false}).waitFor({state:'hidden'});await page.getByLabel('Your message',{exact:true}).fill('The connection is back.');await page.getByRole('button',{name:'Send message',exact:true}).click();await page.getByText('The connection is back.',{exact:true}).waitFor();await shot(page,'conversation-recovered-mobile');await page.setViewportSize({width:1440,height:900});await shot(page,'conversation-recovered-desktop');assert.equal(errors.length,0,errors.join('\n'));
+ console.log('PASS historical JSON filtering, existing-request recovery, Free/Borrow labels, no empty-radius prompt, ambiguous yes clarification, 502 detail/read recovery and real message send; phone/desktop screenshots');
+}catch(error){console.error(`FAIL ${phase}: ${String(error.message).slice(0,500)}`);process.exitCode=1;}
+finally{await browser?.close();const ids=users.map(who=>who.id).filter(Boolean);await removePhotoFixtures(app,db,ids);await db.askSession.deleteMany({where:{userId:{in:ids}}});await db.donationRequest.deleteMany({where:{ownerId:{in:ids}}});await db.listing.deleteMany({where:{ownerId:{in:ids}}});await db.user.deleteMany({where:{id:{in:ids}}});for(const who of users)await auth.deleteUser(who.uid).catch(()=>undefined);await db.$disconnect();await deleteApp(app);}

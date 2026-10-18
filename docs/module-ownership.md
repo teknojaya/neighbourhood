@@ -1,5 +1,10 @@
 # Module ownership
 
+> Historical ownership split. `feat/marketplace-integration` now combines both
+> engineer branches and fills missing services under the user's authorization.
+> Use [implementation-status.md](implementation-status.md) and
+> [integration-handoff.md](integration-handoff.md) for current dependencies.
+
 > **Updated 2026-10-17: architecture change.** PostgreSQL (Prisma 7 migrations; Cloud SQL in production) has replaced Firestore.
 > Sign-in now uses **Google** or a **numeric email OTP** (both via Firebase Auth; there are no passwords).
 > Firebase still provides Authentication, FCM and Cloud Storage. Any section below that mentions Firestore collections, rules or the Firestore emulator is out of date.
@@ -16,10 +21,11 @@
 | Communities, points, QR, volunteers, stock adjustments | **Engineer 1** | `modules/communities` | `features/communities` | `contracts/communities.ts` |
 | Photo-assisted listing drafts | **Engineer 1** (consumer) + Arung (adapter) | `modules/ai` route `listing-draft` | listing create form | `ai/contracts.ts` (ListingDraft*) |
 | Needs saving & matching | **Engineer 2** | `modules/needs`, `modules/ai` route `match-explanations` | `features/needs` (save + matches) | `ai/contracts.ts` (Match*) |
+| Ask chat agent, sessions, tools and action cards | **Engineer 2** + Arung (Gemini adapter/config) | `modules/ask` | `features/ask`, `features/needs/SavedNeedsPage.tsx` | `contracts/ask.ts` |
 | Donation requests & handover | **Engineer 2** | `modules/requests` | `features/activity` | `contracts/requests-loans.ts` (DonationRequest*) |
 | Chat | **Engineer 2** | `modules/conversations` | `features/messages` | `contracts/messaging.ts` |
 | Notifications & push | **Engineer 2** | `modules/notifications` | `features/notifications`, FCM in `sw.ts` (coordinate with Arung) | `contracts/messaging.ts` |
-| Medicine assistance (partner-mediated) | **Engineer 2** | `modules/medicine-assistance` | `features/medicine` | `contracts/messaging.ts` (MedicineAssistance*), `domain/machines.ts` |
+| Product categories | **Engineer 1** (listing creation/filter) + **Engineer 2** (discovery) | existing listings/needs modules | `features/categories` and listing discovery | `enums.ts` (`ItemCategorySchema`) |
 | Domain state machines & stock | shared (review by all) | – | – | `domain/*` |
 
 ## Working agreements
@@ -49,13 +55,12 @@
    `src/test/fakes.ts`).
 8. Run `npm run check` (typecheck, lint, test, build) before opening a PR.
 
-## Suggested first tasks
+## Current integration tasks
 
-- **Engineer 1**: `FirestoreListingsRepository` with `searchWithinRadius`,
-  `POST /listings` + `GET /listings` + public DTO mapping, then
-  `GET /listings/:id/pickup` authorization. Then communities join/points and
-  the deposit review transaction.
-- **Engineer 2**: idempotency helper (`idempotencyKeys`), `POST /requests` with
-  `requestLocks` and self-request guard, then the approval transaction
-  (reserve stock) and the conversations created with it. Then the notifications
-  inbox.
+- **Engineer 1**: finish `POST /listings` and `GET /listings` with public DTOs,
+  then embed `RequestItemForm` on active donation listings and add authorized
+  pickup details. Continue communities and lending after the first demo path.
+- **Engineer 2**: connect saved needs to eligible active listings for grounded
+  matching, then add FCM delivery, token registration and automatic expiry.
+  The request, chat, inbox and saved-needs APIs are implemented and documented in
+  `docs/engineer2-handoff.md`.

@@ -2,6 +2,11 @@ import { z } from 'zod';
 import { ApproximateLocationSchema, IdSchema, IsoDateTimeSchema } from '../common.js';
 import { CommunityRoleSchema, ItemCategorySchema } from '../enums.js';
 import { DepositStatusSchema } from '../domain/machines.js';
+import { LatLngSchema } from '../common.js';
+
+export const CreateCommunityBodySchema = z.strictObject({ name: z.string().trim().min(3).max(80), description: z.string().trim().max(1000).default(''), areaLabel: z.string().trim().min(2).max(120), joinPolicy: z.enum(['open', 'approval_required']).default('open') });
+export const CreatePointBodySchema = z.strictObject({ name: z.string().trim().min(3).max(80), kind: z.enum(['box', 'pantry', 'shelf', 'partner_desk']), partnerName: z.string().trim().min(2).max(120), exactAddress: z.string().trim().min(3).max(300), location: LatLngSchema, areaLabel: z.string().trim().min(2).max(120), publicAddressConsent: z.boolean(), consentedBy: z.string().trim().min(2).max(120), openingHours: z.string().max(300).nullable().default(null) });
+export const AdjustStockBodySchema = z.strictObject({ itemId: z.uuid(), delta: z.number().int().min(-500).max(500).refine(n => n !== 0), reason: z.enum(['collected', 'damaged', 'expired', 'correction']), note: z.string().trim().min(3).max(300) }).refine(b => b.reason === 'correction' || b.delta < 0, { message: 'Collection, damage and expiry decrease stock' });
 
 /**
  * A community is a social group with moderators. It is NOT a radius:
@@ -20,6 +25,7 @@ export type Community = z.infer<typeof CommunitySchema>;
 
 /** `community_memberships` row — written only by the server. */
 export const MembershipSchema = z.object({
+  displayName: z.string().max(60).nullable().optional(),
   communityId: IdSchema,
   userId: IdSchema,
   role: CommunityRoleSchema,
@@ -65,6 +71,7 @@ export const CommunityPointPrivateSchema = z.object({
 });
 
 export const PointInventoryItemSchema = z.object({
+  listingId: z.uuid().nullable().optional(),
   id: IdSchema,
   pointId: IdSchema,
   category: ItemCategorySchema,

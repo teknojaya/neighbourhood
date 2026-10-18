@@ -12,6 +12,7 @@ import { Alert, Button, Card, TextField } from '../../components/ui';
 import { hasMessage, t, type MessageKey } from '../../i18n';
 import { api, ApiError } from '../../lib/api';
 import { useOnline } from '../../lib/useOnline';
+import { DemoSignIn } from './DemoSignIn';
 
 function errorKey(err: unknown): MessageKey {
   if (err instanceof ApiError) {
@@ -148,6 +149,7 @@ export function LoginPage() {
           </form>
         )}
       </Card>
+      <DemoSignIn />
     </main>
   );
 }

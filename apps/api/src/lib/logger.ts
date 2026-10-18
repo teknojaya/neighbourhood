@@ -1,7 +1,7 @@
 /**
  * Minimal structured logger (JSON lines → Cloud Logging).
  *
- * Rules: never log request bodies, AI prompts/outputs, needs text, medicine
+ * Rules: never log request bodies, AI prompts/outputs, needs text, private
  * information, exact locations, tokens or API keys. Log ids and codes only.
  */
 type Level = 'debug' | 'info' | 'warn' | 'error';

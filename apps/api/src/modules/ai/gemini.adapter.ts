@@ -1,106 +1,40 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, type GenerateContentParameters, type GenerateContentResponse } from '@google/genai';
 import { HttpError } from '../../lib/http.js';
 import { logger } from '../../lib/logger.js';
 
-/**
- * Server-only Gemini adapter (Gemini Developer API, Interactions API via
- * @google/genai). The API key never leaves this process.
- *
- * Usage follows https://ai.google.dev/gemini-api/docs/structured-output
- * (verified 2026-10-17): `ai.interactions.create({ model, input,
- * system_instruction, response_format: { type: 'text', mime_type:
- * 'application/json', schema } })` → `interaction.output_text`.
- */
 export interface StructuredRequest {
-  /** Used only for metrics/logs; never log prompts or inputs. */
-  task: string;
-  systemInstruction: string;
-  input: string;
-  jsonSchema: Record<string, unknown>;
-  maxOutputTokens: number;
-  timeoutMs: number;
+  task: string; systemInstruction: string; input: string;
+  jsonSchema: Record<string, unknown>; maxOutputTokens: number; timeoutMs: number;
 }
-
-export interface StructuredGenerator {
-  readonly model: string;
-  /** Returns parsed JSON (unvalidated — callers must validate with Zod). */
-  generateJson(req: StructuredRequest): Promise<unknown>;
+export interface StructuredGenerator { readonly model: string; generateJson(req: StructuredRequest): Promise<unknown> }
+export interface JsonModelClient {
+  generateContent(params: GenerateContentParameters): Promise<Pick<GenerateContentResponse, 'text' | 'candidates'>>;
 }
-
-/** Narrow view of the SDK surface we use, so tests can inject a fake. */
-export interface InteractionsClient {
-  create(
-    params: {
-      model: string;
-      input: string;
-      system_instruction: string;
-      response_format: { type: 'text'; mime_type: 'application/json'; schema: Record<string, unknown> };
-      generation_config: { max_output_tokens: number };
-      store: boolean;
-    },
-    options: { timeout_ms: number; signal: AbortSignal },
-  ): Promise<{ status?: string; output_text?: string }>;
+/** The configured model rejects array-length keywords in structured outputs.
+ * Zod still enforces all array bounds after generation; tools keep their own schema.
+ */
+export function geminiOutputSchema(schema: Record<string, unknown>): Record<string, unknown> {
+  const clean = (value: unknown): unknown => Array.isArray(value) ? value.map(clean) : value && typeof value === 'object'
+    ? Object.fromEntries(Object.entries(value).filter(([key]) => !['maxItems', 'minItems', '$schema'].includes(key)).map(([key, child]) => [key, clean(child)])) : value;
+  return clean(schema) as Record<string, unknown>;
 }
-
+/** Typed, stateless structured generation. Validation and grounding belong to the caller. */
 export class GeminiAdapter implements StructuredGenerator {
-  private readonly client: InteractionsClient;
-
-  constructor(
-    readonly model: string,
-    apiKey: string,
-    client?: InteractionsClient,
-  ) {
-    this.client = client ?? (new GoogleGenAI({ apiKey }).interactions as unknown as InteractionsClient);
-  }
-
+  private readonly client: JsonModelClient;
+  constructor(readonly model: string, apiKey: string, client?: JsonModelClient) { this.client = client ?? new GoogleGenAI({ apiKey }).models; }
   async generateJson(req: StructuredRequest): Promise<unknown> {
     const started = Date.now();
-    let interaction: { status?: string; output_text?: string };
     try {
-      interaction = await this.client.create(
-        {
-          model: this.model,
-          input: req.input,
-          system_instruction: req.systemInstruction,
-          response_format: { type: 'text', mime_type: 'application/json', schema: req.jsonSchema },
-          generation_config: { max_output_tokens: req.maxOutputTokens },
-          // Do not retain user needs text on the provider side beyond the call.
-          store: false,
-        },
-        { timeout_ms: req.timeoutMs, signal: AbortSignal.timeout(req.timeoutMs) },
-      );
-    } catch (err) {
-      const mapped = mapGeminiError(err);
-      logger.warn('ai_call_failed', {
-        task: req.task,
-        model: this.model,
-        code: mapped.code,
-        upstreamStatus: upstreamStatus(err) ?? null,
-        durationMs: Date.now() - started,
-      });
-      throw mapped;
-    }
-
-    logger.info('ai_call_completed', {
-      task: req.task,
-      model: this.model,
-      status: interaction.status ?? 'unknown',
-      durationMs: Date.now() - started,
-    });
-
-    if (interaction.status && interaction.status !== 'completed') {
-      // e.g. "incomplete" when max_output_tokens was hit, or "failed".
-      throw new HttpError(
-        interaction.status === 'incomplete' ? 'AI_INVALID_OUTPUT' : 'AI_UPSTREAM_ERROR',
-        `The AI service did not complete the request (${interaction.status})`,
-      );
-    }
-    const text = interaction.output_text;
-    if (!text) throw new HttpError('AI_INVALID_OUTPUT', 'The AI service returned an empty response');
-    try {
-      return JSON.parse(text) as unknown;
-    } catch {
-      throw new HttpError('AI_INVALID_OUTPUT', 'The AI service returned malformed output');
+      const response = await this.client.generateContent({ model: this.model, contents: req.input,
+        config: { systemInstruction: req.systemInstruction, responseMimeType: 'application/json', responseJsonSchema: geminiOutputSchema(req.jsonSchema),
+          maxOutputTokens: req.maxOutputTokens, abortSignal: AbortSignal.timeout(req.timeoutMs) } });
+      if (response.candidates?.some(candidate => candidate.finishReason === 'MAX_TOKENS') || !response.text) throw new HttpError('AI_INVALID_OUTPUT', 'The AI response did not finish');
+      try { const result: unknown = JSON.parse(response.text); logger.info('ai_call_completed', { task: req.task, model: this.model, durationMs: Date.now() - started }); return result; }
+      catch (error) { if (error instanceof HttpError) throw error; throw new HttpError('AI_INVALID_OUTPUT', 'The AI service returned malformed output'); }
+    } catch (error) {
+      const failure = error instanceof HttpError ? error : mapGeminiError(error);
+      logger.warn('ai_call_failed', { task: req.task, model: this.model, code: failure.code, upstreamStatus: upstreamStatus(error) ?? null, durationMs: Date.now() - started });
+      throw failure;
     }
   }
 }

@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
+import { z } from 'zod';
 import { AI_LIMITS, ExtractNeedsBodySchema } from '@neighbourhood/shared';
-import { HttpError, notImplemented, parseBody } from '../../lib/http.js';
+import { HttpError, parseBody } from '../../lib/http.js';
+import type { MatchingService } from '../needs/matching.service.js';
 import { authUser } from '../auth/auth.js';
 import type { AiService } from './ai.service.js';
 
@@ -21,7 +23,7 @@ export function aiRateLimiter() {
   });
 }
 
-export function aiRouter(service: AiService): Router {
+export function aiRouter(service: AiService, integrations?: { matching?: MatchingService; photo?: (userId: string, sessionId: string, attachmentId: string) => Promise<{ bytes: Buffer; mimeType: string }> }): Router {
   const r = Router();
   const limiter = aiRateLimiter();
 
@@ -35,7 +37,12 @@ export function aiRouter(service: AiService): Router {
   });
 
   // Contracts defined in packages/shared/src/ai/contracts.ts; owners: see docs/module-ownership.md.
-  r.post('/ai/listing-draft', limiter, notImplemented('Photo-assisted listing drafts'));
-  r.post('/ai/match-explanations', limiter, notImplemented('Matching explanations'));
+  r.post('/ai/listing-draft', limiter, async (req, res) => {
+    const body = parseBody(z.strictObject({ sessionId: z.uuid(), attachmentId: z.uuid(), hint: z.string().max(500).default('') }), req);
+    if (!integrations?.photo) throw new HttpError('AI_NOT_CONFIGURED', 'Photo storage unavailable');
+    const photo = await integrations.photo(authUser(req).userId, body.sessionId, body.attachmentId);
+    res.json(await service.draftPhoto(photo.bytes, photo.mimeType, body.hint));
+  });
+  r.post('/ai/match-explanations', limiter, async (req, res) => { const body = parseBody(z.strictObject({ needId: z.uuid() }), req); if (!integrations?.matching) throw new HttpError('AI_NOT_CONFIGURED', 'Matching unavailable'); res.json(await integrations.matching.matches(authUser(req).userId, body.needId)); });
   return r;
 }

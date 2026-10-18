@@ -2,10 +2,10 @@
   "name": "neighbourhood",
   "private": true,
   "version": "0.1.0",
-  "description": "NeighbourHood \u2014 neighbours donating and lending useful items.",
+  "description": "NeighbourHood — neighbours donating and lending useful items.",
   "type": "module",
   "engines": {
-    "node": ">=22.22.0"
+    "node": ">=24.12.0"
   },
   "workspaces": [
     "packages/shared",
@@ -13,9 +13,18 @@
     "apps/web"
   ],
   "scripts": {
+    "smoke:ui": "node scripts/smoke-ui.mjs",
+    "smoke:ui-refinements": "node scripts/smoke-ui-refinements.mjs",
+    "smoke:playground": "node scripts/smoke-playground.mjs",
+    "smoke:ask-agent": "node --env-file-if-exists=apps/api/.env --import tsx scripts/smoke-ask-agent.mjs",
+    "smoke:ask-inputs": "node --env-file-if-exists=apps/api/.env --import tsx scripts/smoke-ask-inputs.mjs",
+    "smoke:ask-recovery": "node --env-file-if-exists=apps/api/.env --import tsx scripts/smoke-ask-recovery.mjs",
+    "smoke:conversations-saved": "node --env-file-if-exists=apps/api/.env --import tsx scripts/smoke-conversations-saved.mjs",
+    "smoke:unread": "node --env-file-if-exists=apps/api/.env --import tsx scripts/smoke-unread.mjs",
+    "smoke:marketplace": "node --env-file-if-exists=apps/api/.env --import tsx scripts/smoke-marketplace.mjs",
     "build:shared": "npm run build -w @neighbourhood/shared",
     "dev": "npm run build:shared && concurrently -k -n shared,api,web -c gray,blue,green \"npm run dev -w @neighbourhood/shared\" \"npm run dev -w @neighbourhood/api\" \"npm run dev -w @neighbourhood/web\"",
-    "emulators": "firebase emulators:start --only auth --project demo-neighbourhood",
+    "emulators": "firebase emulators:start --only auth,storage --project demo-neighbourhood",
     "typecheck": "npm run build:shared && npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "test": "npm run build:shared && npm run test --workspaces --if-present",
@@ -24,7 +33,10 @@
     "check": "npm run typecheck && npm run lint && npm run test && npm run build",
     "db:up": "docker compose up -d postgres",
     "db:migrate": "npm run db:migrate -w @neighbourhood/api",
-    "test:db": "npm run build:shared && npm run test:db -w @neighbourhood/api"
+    "test:db": "npm run build:shared && npm run test:db -w @neighbourhood/api",
+    "smoke:brand-activity": "node --env-file-if-exists=apps/api/.env --import tsx scripts/smoke-brand-activity.mjs",
+    "smoke:start-updates": "node --env-file-if-exists=apps/api/.env --import tsx scripts/smoke-start-updates.mjs",
+    "smoke:seed-catalog": "node --env-file-if-exists=apps/api/.env --import tsx scripts/smoke-seed-catalog.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -34,8 +46,12 @@
     "eslint-plugin-react-hooks": "7.1.1",
     "firebase-tools": "15.34.0",
     "globals": "17.13.0",
+    "playwright": "1.64.1",
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.2",
     "vitest": "5.0.5"
+  },
+  "overrides": {
+    "@grpc/grpc-js": "1.14.6"
   }
 }

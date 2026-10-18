@@ -17,6 +17,7 @@ const STATUS: Record<ApiErrorCode, number> = {
   PAYLOAD_TOO_LARGE: 413,
   NOT_IMPLEMENTED: 501,
   AUTH_NOT_CONFIGURED: 503,
+  STORAGE_UNAVAILABLE: 503,
   UNSUPPORTED_SIGN_IN_METHOD: 403,
   EMAIL_NOT_VERIFIED: 403,
   ACCOUNT_LINK_REQUIRED: 409,
@@ -92,6 +93,8 @@ export const errorHandler: ErrorRequestHandler = (err: unknown, req, res, _next)
   const body: ApiErrorBody = {
     error: { code: httpErr.code, message: httpErr.message, ...(httpErr.details ? { details: httpErr.details } : {}) },
   };
+  // A streamed response cannot switch back to a JSON error body mid-flight.
+  if (res.headersSent) { res.end(); return; }
   res.status(httpErr.status).json(body);
 };
 

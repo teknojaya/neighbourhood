@@ -10,6 +10,11 @@ import type { OtpDeps } from '../modules/email-otp/otp.service.js';
 import { EmailOtpService } from '../modules/email-otp/otp.service.js';
 import type { ProfilesRepository, ProfileUpdate, StoredProfile } from '../modules/profiles/profiles.repository.js';
 import { ProfilesService } from '../modules/profiles/profiles.service.js';
+import type { RequestsService } from '../modules/requests/requests.service.js';
+import type { ConversationsService } from '../modules/conversations/conversations.service.js';
+import type { NotificationsService } from '../modules/notifications/notifications.service.js';
+import type { NeedsService } from '../modules/needs/needs.service.js';
+import { HttpError } from '../lib/http.js';
 
 /**
  * Accepts "test-id-token-for-<firebaseUid>[--<provider>]" and rejects everything
@@ -102,7 +107,11 @@ export function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   return { ...loadConfig({ NODE_ENV: 'test' }), ...overrides };
 }
 
-export function buildTestApp(opts: { generator?: StructuredGenerator | null; otp?: OtpDeps | null; firebaseConfigured?: boolean } = {}) {
+export function buildTestApp(opts: {
+  generator?: StructuredGenerator | null; otp?: OtpDeps | null; firebaseConfigured?: boolean;
+  requests?: RequestsService; conversations?: ConversationsService; notifications?: NotificationsService;
+  needs?: NeedsService;
+} = {}) {
   const access = new InMemoryAccess();
   const users = new InMemoryUsers();
   const profilesRepo = new InMemoryProfiles(users);
@@ -114,6 +123,12 @@ export function buildTestApp(opts: { generator?: StructuredGenerator | null; otp
     otp: new EmailOtpService(opts.otp ?? null, opts.firebaseConfigured ?? true),
     profiles: new ProfilesService(profilesRepo, access),
     ai: new AiService(opts.generator ?? null, () => new Date('2026-10-17T00:00:00Z')),
+    requests: opts.requests ?? { create: unavailable, transition: unavailable, get: unavailable, list: unavailable },
+    conversations: opts.conversations ?? { get: unavailable, list: unavailable, messages: unavailable, send: unavailable, markRead: unavailable },
+    notifications: opts.notifications ?? { list: unavailable, markRead: unavailable, unread: unavailable },
+    needs: opts.needs ?? { list: unavailable, save: unavailable, delete: unavailable },
   });
   return { app, access, users, profilesRepo };
 }
+
+async function unavailable(): Promise<never> { throw new HttpError('NOT_IMPLEMENTED', 'No feature fake supplied'); }

@@ -18,7 +18,6 @@ export const listingMachine: StateMachine<ListingStatus> = {
     { from: 'paused', to: 'closed', actors: ['owner', 'system'] },
   ],
 };
-
 // ------------------------------------------------------- Donation request
 export const DonationRequestStatusSchema = z.enum([
   'pending',
@@ -85,32 +84,5 @@ export const depositMachine: StateMachine<DepositStatus> = {
   rules: [
     { from: 'proposed', to: 'accepted', actors: ['volunteer'] },
     { from: 'proposed', to: 'rejected', actors: ['volunteer'] },
-  ],
-};
-
-// --------------------------------------------- Medicine assistance (private)
-export const MedicineAssistanceStatusSchema = z.enum([
-  'submitted',
-  'under_review',
-  'referred',
-  'closed',
-  'withdrawn',
-]);
-export type MedicineAssistanceStatus = z.infer<typeof MedicineAssistanceStatusSchema>;
-
-/**
- * `volunteer` here means a verified medicine partner (PlatformRole
- * `medicine_partner`). Only humans at verified partners move cases; AI never does.
- */
-export const medicineAssistanceMachine: StateMachine<MedicineAssistanceStatus> = {
-  name: 'medicineAssistance',
-  terminal: ['closed', 'withdrawn'],
-  rules: [
-    { from: 'submitted', to: 'under_review', actors: ['volunteer'] },
-    { from: 'submitted', to: 'withdrawn', actors: ['requester'] },
-    { from: 'under_review', to: 'referred', actors: ['volunteer'] },
-    { from: 'under_review', to: 'closed', actors: ['volunteer'] },
-    { from: 'under_review', to: 'withdrawn', actors: ['requester'] },
-    { from: 'referred', to: 'closed', actors: ['volunteer'] },
   ],
 };

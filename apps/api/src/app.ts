@@ -3,8 +3,15 @@ import express, { type Express, Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import helmet from 'helmet';
 import { API_PREFIX, ApiRoutes } from '@neighbourhood/shared';
+import type { LoansService } from './modules/loans/loans.service.js';
+import type { CommunitiesService } from './modules/communities/communities.service.js';
+import type { MatchingService } from './modules/needs/matching.service.js';
+import { pushRouter } from './modules/notifications/push.routes.js';
+import type { Db } from './lib/db.js';
+import QRCode from 'qrcode';
+import { z } from 'zod';
 import type { AppConfig } from './config.js';
-import { errorHandler, HttpError, notFound } from './lib/http.js';
+import { errorHandler, HttpError, notFound, parseBody } from './lib/http.js';
 import { aiRouter } from './modules/ai/ai.routes.js';
 import type { AiService } from './modules/ai/ai.service.js';
 import type { AccessRepository } from './modules/auth/access.js';
@@ -14,13 +21,22 @@ import { authPublicRouter } from './modules/email-otp/otp.routes.js';
 import type { EmailOtpService } from './modules/email-otp/otp.service.js';
 import { conversationsRouter } from './modules/conversations/conversations.routes.js';
 import { listingsRouter } from './modules/listings/listings.routes.js';
+import { savedItemsRouter } from './modules/listings/saved-items.routes.js';
 import { loansRouter } from './modules/loans/loans.routes.js';
-import { medicineAssistanceRouter } from './modules/medicine-assistance/medicine-assistance.routes.js';
 import { needsRouter } from './modules/needs/needs.routes.js';
+import type { NeedsService } from './modules/needs/needs.service.js';
 import { notificationsRouter } from './modules/notifications/notifications.routes.js';
 import { profilesRouter } from './modules/profiles/profiles.routes.js';
 import type { ProfilesService } from './modules/profiles/profiles.service.js';
 import { requestsRouter } from './modules/requests/requests.routes.js';
+import type { RequestsService } from './modules/requests/requests.service.js';
+import type { ConversationsService } from './modules/conversations/conversations.service.js';
+import type { NotificationsService } from './modules/notifications/notifications.service.js';
+import { askRouter } from './modules/ask/ask.routes.js';
+import type { AskService } from './modules/ask/ask.service.js';
+import type { ListingsService } from './modules/listings/listings.service.js';
+import { storageReadRouter } from './modules/storage/storage.routes.js';
+import type { VerifiableObjectStorage } from './lib/storage.js';
 
 export interface AppDeps {
   config: AppConfig;
@@ -30,6 +46,18 @@ export interface AppDeps {
   otp: EmailOtpService;
   profiles: ProfilesService;
   ai: AiService;
+  matching?: MatchingService;
+  db?: Db;
+  demoSignIn?: (uid: 'demo-owner' | 'demo-neighbour' | 'demo-volunteer' | 'demo-moderator' | 'demo-newcomer') => Promise<string>;
+  requests: RequestsService;
+  conversations: ConversationsService;
+  notifications: NotificationsService;
+  needs: NeedsService;
+  loans?: LoansService;
+  communities?: CommunitiesService;
+  ask?: AskService;
+  listings?: ListingsService;
+  photoStorage?: VerifiableObjectStorage;
 }
 
 export function createApp(deps: AppDeps): Express {
@@ -45,7 +73,7 @@ export function createApp(deps: AppDeps): Express {
           // apis.google.com: Firebase Auth helper for Google sign-in (popup/redirect).
           scriptSrc: ["'self'", 'https://apis.google.com'],
           styleSrc: ["'self'", "'unsafe-inline'"],
-          imgSrc: ["'self'", 'data:', 'blob:', 'https://firebasestorage.googleapis.com', 'https://storage.googleapis.com'],
+          imgSrc: ["'self'", 'data:', 'blob:', 'https://firebasestorage.googleapis.com', 'https://storage.googleapis.com', 'https://tile.openstreetmap.org'],
           connectSrc: [
             "'self'",
             'https://identitytoolkit.googleapis.com',
@@ -97,19 +125,31 @@ export function createApp(deps: AppDeps): Express {
   api.use(express.json({ limit: '32kb' }));
   // Public sign-in support (auth methods, email OTP → Firebase custom token).
   api.use(authPublicRouter(deps.otp));
+  if (deps.config.firebase.useEmulators && deps.demoSignIn) api.post('/auth/demo', async (req, res) => { const body = parseBody(z.strictObject({ uid: z.enum(['demo-owner', 'demo-neighbour', 'demo-volunteer', 'demo-moderator', 'demo-newcomer']) }), req); res.json({ customToken: await deps.demoSignIn!(body.uid) }); });
+  if (deps.communities) api.get('/points/qr-image/:qrId', async (req, res) => {
+    const qrId = z.string().regex(/^[A-Za-z0-9_-]{16,64}$/).parse(req.params.qrId);
+    await deps.communities!.qr(qrId);
+    res.type('image/png').send(await QRCode.toBuffer(qrId, { width: 240, margin: 4, errorCorrectionLevel: 'M' }));
+  });
+  // Local storage routes (unauthenticated to mirror S3/GCS signed URL behavior)
+  if (deps.photoStorage) {
+    api.use(storageReadRouter(deps.photoStorage));
+  }
   // Every other /api/v1 route requires a verified Firebase ID token mapped to a PostgreSQL user.
   api.use(requireAuth(deps.tokenVerifier, deps.users));
 
   api.use(profilesRouter(deps.profiles));
-  api.use(aiRouter(deps.ai));
-  api.use(listingsRouter());
-  api.use(communitiesRouter());
-  api.use(requestsRouter());
-  api.use(loansRouter());
-  api.use(needsRouter());
-  api.use(conversationsRouter());
-  api.use(notificationsRouter());
-  api.use(medicineAssistanceRouter());
+  api.use(aiRouter(deps.ai, { matching: deps.matching, photo: deps.ask ? (userId, sessionId, attachmentId) => deps.ask!.image(userId, sessionId, attachmentId) : undefined }));
+  if (deps.ask) api.use(askRouter(deps.ask));
+  api.use(listingsRouter(deps.listings));
+  if (deps.db && deps.listings) api.use(savedItemsRouter(deps.db, deps.listings));
+  api.use(communitiesRouter(deps.communities));
+  api.use(requestsRouter(deps.requests));
+  api.use(loansRouter(deps.loans));
+  api.use(needsRouter(deps.needs, deps.matching));
+  api.use(conversationsRouter(deps.conversations));
+  api.use(notificationsRouter(deps.notifications));
+  if (deps.db) api.use(pushRouter(deps.db));
   api.use(notFound);
 
   app.use(API_PREFIX, api);

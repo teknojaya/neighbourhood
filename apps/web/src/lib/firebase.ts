@@ -6,7 +6,7 @@ import { type Auth, connectAuthEmulator, getAuth } from 'firebase/auth';
  * (access is enforced by the API + security rules). Server secrets such as
  * GEMINI_API_KEY must never be exposed via VITE_ variables.
  */
-const config = {
+export const firebasePublicConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
@@ -15,6 +15,7 @@ const config = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
+const config = firebasePublicConfig;
 export const firebaseConfigured = Boolean(config.apiKey && config.projectId && config.authDomain);
 
 const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
@@ -37,3 +38,4 @@ export function getFirebaseAuth(): Auth | null {
   }
   return auth;
 }
+export function getFirebaseApp(): FirebaseApp | null { getFirebaseAuth(); return app; }

@@ -32,10 +32,11 @@ export const ApplianceDetailsSchema = z.object({
 export type ApplianceDetails = z.infer<typeof ApplianceDetailsSchema>;
 
 export const ListingPhotoSchema = z.object({
+  id: z.uuid().optional(),
   /** Cloud Storage object path under listings/{listingId}/. */
   path: z.string().max(300),
-  /** Short-lived signed URL produced server-side. */
-  url: z.string().url().optional(),
+  /** Short-lived signed URL produced server-side or local storage endpoint. */
+  url: z.string().optional(),
 });
 
 export const LendingTermsSchema = z.object({
@@ -86,6 +87,7 @@ export type ListingPrivate = z.infer<typeof ListingPrivateSchema>;
 
 export const CreateListingBodySchema = z
   .strictObject({
+    pointInventoryItemId: z.uuid().nullable().optional().default(null),
     mode: ListingModeSchema,
     category: ItemCategorySchema,
     title: z.string().trim().min(3).max(100),
@@ -118,11 +120,30 @@ export const CreateListingBodySchema = z
   });
 export type CreateListingBody = z.infer<typeof CreateListingBodySchema>;
 
+export const UpdateListingBodySchema = z.strictObject({
+  title: z.string().trim().min(3).max(100).optional(),
+  description: z.string().trim().max(2000).optional(),
+  condition: ItemConditionSchema.optional(),
+  quantity: z.number().int().min(1).max(1000).optional(),
+  areaLabel: z.string().trim().min(2).max(120).optional(),
+  pickupInstructions: z.string().trim().max(1000).optional(),
+  appliance: ApplianceDetailsSchema.nullable().optional(),
+  lending: LendingTermsSchema.nullable().optional(),
+  bestBefore: z.iso.date().nullable().optional(),
+});
+export type UpdateListingBody = z.infer<typeof UpdateListingBodySchema>;
+
+export const CreateListingPhotoBodySchema = z.strictObject({
+  contentType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+});
+export type CreateListingPhotoBody = z.infer<typeof CreateListingPhotoBodySchema>;
+
 export const ListingTransitionBodySchema = z.strictObject({
   to: ListingStatusSchema,
 });
 
 export const SearchListingsQuerySchema = z.object({
+  query: z.string().trim().max(100).optional(),
   lat: z.coerce.number().min(-90).max(90),
   lng: z.coerce.number().min(-180).max(180),
   radiusKm: RadiusKmSchema,

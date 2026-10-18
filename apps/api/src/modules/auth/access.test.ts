@@ -57,7 +57,7 @@ describe('role granting policy', () => {
 describe('requirePlatformRole', () => {
   const build = (access: InMemoryAccess) => {
     const app = express();
-    app.get('/partner', requireAuth(new FakeVerifier(), new UserProvisioningService(new InMemoryUsers())), requirePlatformRole(access, 'medicine_partner'), (_req, res) => {
+    app.get('/category-editor', requireAuth(new FakeVerifier(), new UserProvisioningService(new InMemoryUsers())), requirePlatformRole(access, 'product_category_editor'), (_req, res) => {
       res.json({ ok: true });
     });
     app.use(errorHandler);
@@ -65,12 +65,12 @@ describe('requirePlatformRole', () => {
   };
   it('allows only users holding the server-stored role', async () => {
     const access = new InMemoryAccess();
-    access.roles.set(userIdFor('pharma'), ['medicine_partner']);
+    access.roles.set(userIdFor('editor'), ['product_category_editor']);
     access.roles.set(userIdFor('staffer'), ['staff']);
     const app = build(access);
-    await request(app).get('/partner').set('Authorization', bearer('pharma')).expect(200);
-    await request(app).get('/partner').set('Authorization', bearer('staffer')).expect(403);
-    await request(app).get('/partner').set('Authorization', bearer('nobody')).expect(403);
-    await request(app).get('/partner').expect(401);
+    await request(app).get('/category-editor').set('Authorization', bearer('editor')).expect(200);
+    await request(app).get('/category-editor').set('Authorization', bearer('staffer')).expect(403);
+    await request(app).get('/category-editor').set('Authorization', bearer('nobody')).expect(403);
+    await request(app).get('/category-editor').expect(401);
   });
 });

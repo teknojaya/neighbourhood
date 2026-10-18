@@ -47,6 +47,7 @@ export function assertNoConflictingLoan(
 ): void {
   for (const loan of existing) {
     if (loan.id === candidate.id || !BLOCKING_LOAN_STATUSES.includes(loan.status)) continue;
+    if (loan.status === 'checked_out' && toDay(today) > toDay(loan.endDate) && toDay(candidate.endDate) >= toDay(loan.startDate)) throw new DomainError('CONFLICT', 'The overdue item must be returned before approving another loan');
     const effective =
       loan.status === 'checked_out' && toDay(today) > toDay(loan.endDate) ? { ...loan, endDate: today } : loan;
     if (rangesOverlap(candidate, effective)) {

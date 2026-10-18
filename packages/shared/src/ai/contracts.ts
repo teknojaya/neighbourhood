@@ -59,13 +59,13 @@ export const NeedsExtractionSchema = z.object({
   /** Questions in the same language as the input. */
   clarificationQuestions: z.array(shortText).max(5),
   /**
-   * Requests outside what the marketplace handles. UI routes medicine to the
-   * private partner flow; blood donation and transport are out of scope.
+   * Requests outside what the marketplace handles, such as blood donation
+   * and transport services. Item needs stay in the product category flow.
    */
   outOfScope: z
     .array(
       z.object({
-        kind: z.enum(['medicine', 'blood_donation', 'transport_or_delivery', 'other']),
+        kind: z.enum(['blood_donation', 'transport_or_delivery', 'other']),
         note: shortText,
       }),
     )
@@ -101,8 +101,8 @@ export const ListingDraftSchema = z.object({
   observedAttributes: z.array(z.object({ name: z.string().max(50), value: z.string().max(100) })).max(10),
   /** Things the owner must confirm (dimensions, working status, expiry...). */
   needsConfirmation: z.array(shortText).max(10),
-  /** e.g. medicine detected → listing blocked and user directed to partner flow. */
-  safetyFlags: z.array(z.enum(['medicine', 'weapon', 'hazardous', 'personal_data_visible', 'other'])).max(5),
+  /** Potential hazards are for owner review before publishing. */
+  safetyFlags: z.array(z.enum(['weapon', 'hazardous', 'personal_data_visible', 'other'])).max(5),
 });
 export type ListingDraft = z.infer<typeof ListingDraftSchema>;
 

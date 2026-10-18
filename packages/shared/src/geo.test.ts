@@ -4,10 +4,12 @@ import { approximateLocation, distanceKm, geohashFor, geohashRanges, RadiusKmSch
 const monas = { lat: -6.1754, lng: 106.8272 };
 
 describe('radius options', () => {
-  it('defaults to 3 km and only accepts 1/3/5/10', () => {
+  it('defaults to 3 km and accepts bounded manual whole kilometres', () => {
     expect(RadiusKmSchema.parse(undefined)).toBe(3);
     expect(RadiusKmSchema.parse('5')).toBe(5);
-    expect(RadiusKmSchema.safeParse('7').success).toBe(false);
+    expect(RadiusKmSchema.parse('7')).toBe(7);
+    expect(RadiusKmSchema.parse('50')).toBe(50);
+    for (const invalid of ['', '0', '-1', '51', '2.5', 'Infinity', 'abc']) expect(RadiusKmSchema.safeParse(invalid).success).toBe(false);
   });
 });
 

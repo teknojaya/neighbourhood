@@ -70,14 +70,15 @@ function Thread({ id }: { id: string }) {
   const newest = messages.data?.pages[0]?.items[0]?.id;
   const { mutate: markRead, ...read } = useMutation({
     mutationFn: (throughMessageId: string) => api(`${ApiRoutes.conversations}/${encodeURIComponent(id)}/read`, { method: 'POST', body: { throughMessageId }, schema: z.null() }),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['notifications', 'unread'] }); return qc.invalidateQueries({ queryKey: ['conversations'] }); },
+    onSuccess: (_value, throughMessageId) => { lastRead.current = throughMessageId; void qc.invalidateQueries({ queryKey: ['notifications', 'unread'] }); return qc.invalidateQueries({ queryKey: ['conversations'] }); },
+    onError: () => { lastRead.current = null; },
   });
   useEffect(() => {
-    if (online && newest && lastRead.current !== newest) {
+    if (online && detail.isSuccess && newest && lastRead.current !== newest) {
       lastRead.current = newest;
       markRead(newest);
     }
-  }, [newest, markRead, online]);
+  }, [newest, markRead, online, detail.isSuccess, detail.dataUpdatedAt]);
   const send = useMutation({
     mutationFn: () => {
       const body = { body: text.trim(), attachmentIds: photos.map(photo => photo.id) };
@@ -97,7 +98,7 @@ function Thread({ id }: { id: string }) {
   return <div className="conversation-page">
     {detail.data?.listingTitle && <Link to={detail.data.listingId ? '/listings/' + detail.data.listingId : '/activity'} className="flex shrink-0 items-center gap-3 rounded-xl border border-stone-200 bg-white p-3">{detail.data.listingPhotoUrl && <img src={detail.data.listingPhotoUrl} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover" />}<div className="min-w-0"><h2 className="break-words font-semibold">{detail.data.listingTitle}</h2><p className="text-sm text-brand-800">View item details</p></div></Link>}
     <div ref={scroll} className="conversation-scroll space-y-3 pr-1">
-    {detail.isError && <Alert tone="error">{featureError(detail.error)}</Alert>}
+    {detail.isError && <Alert tone="error">{featureError(detail.error)} <Button variant="ghost" disabled={!online || detail.isFetching} onClick={() => void Promise.all([detail.refetch(), messages.refetch()])}>{t('common.retry')}</Button></Alert>}
     {messages.isPending && <Skeleton cards={2} />}
     {messages.isError && <Alert tone="error">{featureError(messages.error)} <Button variant="ghost" onClick={() => void messages.refetch()}>{t('common.retry')}</Button></Alert>}
     {messages.hasNextPage && <Button variant="secondary" disabled={messages.isFetchingNextPage} onClick={() => void messages.fetchNextPage()}>{t('messages.older')}</Button>}

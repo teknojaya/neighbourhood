@@ -67,6 +67,22 @@ afterAll(async () => {
 });
 
 describe('Ask sessions, agent tools and confirmed actions against PostgreSQL', () => {
+  it('filters leaked card JSON in streams/history and keeps application data out of assistant prose', async () => {
+    const dirty = 'Please review the card.\nServer cards: [{"kind":"marketplace_confirmation","attachmentIds":["private"]}]';
+    const model = Object.assign(new FakeModel(), { generate: async (_contents: Content[], _tools: unknown, _signal: AbortSignal, onText?: (text: string) => Promise<void>) => { await onText?.(dirty); return {role:'model',parts:[{text:dirty}]} as Content; } });
+    const f = await fixture(model); const partials:string[]=[];
+    await f.ask.send(f.user.id,f.session.id,send(),event=>{partials.push(event.run.partialText);});
+    expect(partials.join('')).not.toMatch(/Server cards|attachmentIds|marketplace_confirmation/);
+    const last=(await f.ask.detail(f.user.id,f.session.id)).messages.items.at(-1)!;
+    expect(last.text).toBe('Please review the card.');
+    await db.askMessage.update({where:{id:last.id},data:{text:dirty,parts:[{kind:'questions',questions:[{question:'Which condition?',options:['Good']}]}]}});
+    f.model = new FakeModel();
+    const next = new PrismaAskService(db,f.model,f.images,services);
+    await next.send(f.user.id,f.session.id,send('Good'));
+    const context=f.model.calls[0]!;
+    expect(context.filter(part=>part.role==='model').flatMap(part=>part.parts??[]).map(part=>part.text??'').join('')).not.toMatch(/Server cards|"kind"/);
+    expect(JSON.stringify(context)).toContain('Application state');
+  });
   it('hands real photo input back without preparing a simultaneous write and does not request an existing photo again', async () => {
     const f = await fixture(new FakeModel(() => ({ role: 'model', parts: [
       { functionCall: { name: 'request_input', args: { input: 'photo', prompt: 'Can you add a photo of the clothes?' } } },
@@ -260,6 +276,15 @@ describe('Ask sessions, agent tools and confirmed actions against PostgreSQL', (
     expect(JSON.stringify(history)).not.toContain('inlineData');
     await expect(f.ask.removeAttachment(f.user.id, f.session.id, image.id)).rejects.toMatchObject({ code: 'CONFLICT' });
     await request(f.app).post(`/api/v1/ask/sessions/${f.session.id}/attachments`).set('Authorization', bearer(f.user.firebaseUid)).set('Idempotency-Key', randomUUID()).set('Content-Type', 'image/jpeg').send(photo).expect(400);
+  });
+  it('continues a chat when an old emulator photo is missing without inventing its contents', async () => {
+    const f=await fixture(); const photo=await sharp({create:{width:2,height:2,channels:3,background:'red'}}).png().toBuffer();
+    const uploaded=await f.ask.upload(f.user.id,f.session.id,photo,'image/png');
+    await f.ask.send(f.user.id,f.session.id,{...send('Here is a photo'),attachmentIds:[uploaded.id]});
+    f.images.files.clear();
+    expect((await f.ask.send(f.user.id,f.session.id,send('Can we continue with text?'))).status).toBe('completed');
+    expect(JSON.stringify(f.model.calls.at(-1))).toContain('earlier photo is unavailable');
+    expect(f.model.calls.at(-1)?.flatMap(content=>content.parts??[]).some(part=>part.inlineData)).toBe(false);
   });
 
   it('deletes chat history and photos, retains saved needs, and retries failed storage cleanup', async () => {

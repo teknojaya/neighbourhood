@@ -110,7 +110,13 @@ function main() {
     photoStorage,
   });
 
-  const server = app.listen(config.port, () => {
+  const server = app.listen(config.port, (error) => {
+    if (error) {
+      logger.error('server_start_failed', { port: config.port, code: (error as NodeJS.ErrnoException).code ?? 'INTERNAL' });
+      clearInterval(cleanup); clearInterval(jobs);
+      void db.$disconnect().finally(() => process.exit(1));
+      return;
+    }
     logger.info('server_started', {
       port: config.port,
       env: config.env,

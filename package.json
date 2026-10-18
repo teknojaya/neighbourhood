@@ -18,6 +18,7 @@
     "smoke:playground": "node scripts/smoke-playground.mjs",
     "smoke:ask-agent": "node --env-file-if-exists=apps/api/.env --import tsx scripts/smoke-ask-agent.mjs",
     "smoke:ask-inputs": "node --env-file-if-exists=apps/api/.env --import tsx scripts/smoke-ask-inputs.mjs",
+    "smoke:ask-recovery": "node --env-file-if-exists=apps/api/.env --import tsx scripts/smoke-ask-recovery.mjs",
     "smoke:conversations-saved": "node --env-file-if-exists=apps/api/.env --import tsx scripts/smoke-conversations-saved.mjs",
     "smoke:unread": "node --env-file-if-exists=apps/api/.env --import tsx scripts/smoke-unread.mjs",
     "smoke:marketplace": "node --env-file-if-exists=apps/api/.env --import tsx scripts/smoke-marketplace.mjs",

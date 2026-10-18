@@ -58,11 +58,62 @@ afterAll(async () => {
   await db.$disconnect();
 });
 describe('integrated marketplace against PostgreSQL', () => {
+  it('reuses pending request cards and recovers an existing request instead of failing confirmation', async () => {
+    const f = await fixture(); const listing = await f.listings.createListing(f.owner.id, body(), randomUUID());
+    const session = await f.ask.create(f.neighbour.id, randomUUID()); const run = await db.askRun.create({data:{sessionId:session.id,clientMessageId:randomUUID(),requestHash:'a'.repeat(64)}});
+    const tools = new AskTools(db,{needs:f.needs,requests:f.requests,conversations:f.conversations,notifications:f.notifications,listings:{get:async(uid,id)=>(await f.listings.getListingDetail(uid,id)).listing}});
+    const ctx={userId:f.neighbour.id,sessionId:session.id,runId:run.id,attemptId:run.attemptId,signal:new AbortController().signal};
+    const input={listingId:listing.id,quantity:1,message:''};
+    const first=(await tools.execute('prepare_request',input,ctx)).parts[0]; if(first?.kind!=='action')throw new Error('Missing request proposal');
+    const repeat=(await tools.execute('prepare_request',input,ctx)).parts[0]; expect(repeat).toMatchObject({kind:'action',action:{id:first.action.id,status:'pending'}});
+    expect(await db.askAction.count({where:{sessionId:session.id}})).toBe(1);
+    const existing=(await f.requests.create(f.neighbour.id,randomUUID(),input)).body;
+    const confirmed=await f.ask.confirm(f.neighbour.id,first.action.id,0);
+    expect(confirmed).toMatchObject({status:'completed',receipt:{link:`/activity?request=${existing.id}`}});
+    expect(confirmed.receipt?.message).toContain('already have');
+    expect(await db.donationRequest.count({where:{requesterId:f.neighbour.id,listingId:listing.id}})).toBe(1);
+    expect(await db.notification.count({where:{userId:f.owner.id,type:'request_received'}})).toBe(1);
+    const again=await tools.execute('prepare_request',input,ctx); expect(again.parts).toMatchObject([{kind:'requests',items:[{id:existing.id}]}]);
+    expect(again.reply).toContain('already have');
+    await db.askAction.update({where:{id:first.action.id},data:{status:'cancelled',errorCode:'CONFLICT'}});
+    await db.askMessage.create({data:{sessionId:session.id,sequence:0,role:'assistant',text:'Review request',parts:[{kind:'action',action:first.action}]}});
+    expect((await f.ask.detail(f.neighbour.id,session.id)).messages.items[0]?.parts[0]).toMatchObject({kind:'action',action:{errorCode:null,receipt:{link:`/activity?request=${existing.id}`}}});
+  });
+  it('asks for a same-title listing choice and rejects a different ordinal target', async () => {
+    const f=await fixture(); const first=await f.listings.createListing(f.owner.id,body(),randomUUID()); const second=await f.listings.createListing(f.owner.id,body(),randomUUID());
+    const session=await f.ask.create(f.neighbour.id,randomUUID()); const run=await db.askRun.create({data:{sessionId:session.id,clientMessageId:randomUUID(),requestHash:'a'.repeat(64)}});
+    const tools=new AskTools(db,{needs:f.needs,requests:f.requests,conversations:f.conversations,notifications:f.notifications,listings:{get:async(uid,id)=>(await f.listings.getListingDetail(uid,id)).listing}});
+    const ctx={userId:f.neighbour.id,sessionId:session.id,runId:run.id,attemptId:run.attemptId,signal:new AbortController().signal};
+    await db.askMessage.create({data:{sessionId:session.id,sequence:0,role:'assistant',text:'Choose an item',parts:[{kind:'listings',items:[first,second]}]}});
+    await db.askMessage.create({data:{sessionId:session.id,sequence:1,role:'user',text:'1'}});
+    expect((await tools.execute('prepare_request',{listingId:first.id,quantity:1,message:''},ctx)).parts).toMatchObject([{kind:'questions'}]);
+    expect(await db.askAction.count({where:{sessionId:session.id}})).toBe(0);
+    await db.askMessage.create({data:{sessionId:session.id,sequence:2,role:'user',text:'Second Children books'}});
+    await expect(tools.execute('prepare_request',{listingId:first.id,quantity:1,message:''},ctx)).rejects.toMatchObject({code:'VALIDATION_FAILED'});
+    expect((await tools.execute('prepare_request',{listingId:second.id,quantity:1,message:''},ctx)).parts).toMatchObject([{kind:'action'}]);
+  });
+  it('does not publish a quantity inferred from a photo and accepts a conversational answer', async () => {
+    const f=await fixture(); const session=await f.ask.create(f.owner.id,randomUUID());const run=await db.askRun.create({data:{sessionId:session.id,clientMessageId:randomUUID(),requestHash:'a'.repeat(64)}});
+    const tools=new AskTools(db,{needs:f.needs,requests:f.requests,conversations:f.conversations,notifications:f.notifications,marketplace:{listings:f.listings,loans:f.loans,communities:f.communities}});
+    const ctx={userId:f.owner.id,sessionId:session.id,runId:run.id,attemptId:run.attemptId,signal:new AbortController().signal};
+    await db.askMessage.create({data:{sessionId:session.id,sequence:0,role:'user',text:"Here's my clothes"}});
+    const draft=await tools.execute('draft_listing',{title:'Jackets',category:'clothing',mode:'donate',condition:'like_new',quantity:1,description:'Jackets to give away'},ctx);
+    expect(draft.parts).toMatchObject([{kind:'listing_draft',draft:{data:{quantity:null}}}]);
+    expect((await tools.execute('prepare_publish_listing',{useSavedLocation:true},ctx)).parts).toMatchObject([{kind:'questions'}]);
+    expect(await db.askAction.count({where:{sessionId:session.id}})).toBe(0);
+    await db.askMessage.create({data:{sessionId:session.id,sequence:1,role:'assistant',text:'How many items are you sharing?'}});
+    await db.askMessage.create({data:{sessionId:session.id,sequence:2,role:'user',text:'2'}});
+    await tools.execute('draft_listing',{quantity:2},ctx);
+    expect((await tools.execute('prepare_publish_listing',{useSavedLocation:true},ctx)).parts).toMatchObject([{kind:'action',action:{payload:{action:{body:{quantity:2}}}}}]);
+    expect(await db.listing.count({where:{ownerId:f.owner.id}})).toBe(0);
+  });
   it('distinguishes a missing public area from coordinates and approves its label without changing private location', async () => {
     const f = await fixture(); await db.user.update({ where: { id: f.owner.id }, data: { areaLabel: null } });
     const session = await f.ask.create(f.owner.id, randomUUID()); const run = await db.askRun.create({ data: { sessionId: session.id, clientMessageId: randomUUID(), requestHash: 'a'.repeat(64) } });
     const tools = new AskTools(db, { needs: f.needs, requests: f.requests, conversations: f.conversations, notifications: f.notifications, marketplace: { listings: f.listings, loans: f.loans, communities: f.communities } });
     const ctx = { userId: f.owner.id, sessionId: session.id, runId: run.id, attemptId: run.attemptId, signal: new AbortController().signal };
+    await db.askMessage.create({ data: { sessionId: session.id, sequence: 0, role: 'user', text: 'I am donating one shirt in good condition.' } });
+    await db.askSession.update({ where: { id: session.id }, data: { nextSequence: 1 } });
     const account = await tools.execute('my_account', {}, ctx);
     expect(account.result).toMatchObject({ searchLocationSet: true, pickupLocationReady: false, missingLocationFields: ['publicArea'] });
     expect(JSON.stringify(account.result)).not.toMatch(/homeLat|homeLng|exactLocation/);
@@ -128,7 +179,7 @@ describe('integrated marketplace against PostgreSQL', () => {
     const services = { needs: f.needs, requests: f.requests, conversations: f.conversations, notifications: f.notifications, marketplace: { listings: f.listings, loans: f.loans, communities: f.communities } };
     const ask = new PrismaAskService(db, null, images, services); const session = await ask.create(f.owner.id, randomUUID());
     const photo = await ask.upload(f.owner.id, session.id, await sharp({ create: { width: 5, height: 5, channels: 3, background: 'blue' } }).png().toBuffer(), 'image/png');
-    await db.askMessage.create({ data: { sessionId: session.id, sequence: 0, role: 'user', text: 'Share my jackets', attachmentIds: [photo.id] } });
+    await db.askMessage.create({ data: { sessionId: session.id, sequence: 0, role: 'user', text: 'Share my two jackets', attachmentIds: [photo.id] } });
     await db.askSession.update({ where: { id: session.id }, data: { nextSequence: 1 } });
     const run = await db.askRun.create({ data: { sessionId: session.id, clientMessageId: randomUUID(), requestHash: 'a'.repeat(64) } });
     const ctx = { userId: f.owner.id, sessionId: session.id, runId: run.id, attemptId: run.attemptId, signal: new AbortController().signal }; const tools = new AskTools(db, services);

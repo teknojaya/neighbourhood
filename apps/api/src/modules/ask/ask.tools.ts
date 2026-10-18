@@ -1,7 +1,8 @@
 import { z } from 'zod';
+import { isDeepStrictEqual } from 'node:util';
 import type { FunctionDeclaration } from '@google/genai';
 import {
-  ASK_LIMITS, AskActionPayloadSchema, AskInputSchema, AskListingDraftDataSchema, AskListingDraftSchema,
+  ASK_LIMITS, AskActionPayloadSchema, AskInputSchema, AskListingDraftDataSchema, AskListingDraftSchema, AskPartSchema,
   CreateDonationRequestBodySchema, DonationRequestTransitionBodySchema, NeedsExtractionSchema,
   type AskActionPayload, type AskPart, type ListingPublic,
   ItemCategorySchema, ListingModeSchema, RadiusKmSchema, MAX_RADIUS_KM, MarketplaceActionSchema, modelSafe,
@@ -16,6 +17,7 @@ import { actionDto } from './ask.dto.js';
 import { ModelMarketplaceActionSchema, authorizeProposal, marketplaceSummary, type MarketplaceServices } from './ask.marketplace.js';
 import { PRODUCT_GUIDE } from './product-knowledge.js';
 import { normalizeListingSearch } from '../listings/search-terms.js';
+import { quantityWasStated } from './ask.presentation.js';
 
 export interface AskServices {
   marketplace?: MarketplaceServices;
@@ -24,7 +26,7 @@ export interface AskServices {
   listings?: { get(userId: string, id: string): Promise<ListingPublic> };
 }
 export interface ToolContext { userId: string; sessionId: string; runId: string; attemptId: string; signal: AbortSignal }
-interface ToolResult { result: unknown; parts: AskPart[] }
+interface ToolResult { result: unknown; parts: AskPart[]; reply?: string }
 interface RegisteredTool { declaration: FunctionDeclaration; execute(args: unknown, ctx: ToolContext): Promise<ToolResult> }
 const paging = z.strictObject({ cursor: z.string().max(500).optional() });
 
@@ -106,6 +108,20 @@ export class AskTools {
       if (!z.uuid().safeParse(body.listingId).success) throw new HttpError('VALIDATION_FAILED', 'Invalid listing');
       const listing = await services.listings!.get(ctx.userId, body.listingId);
       if (listing.status !== 'active' || listing.mode !== 'donate' || listing.ownerId === ctx.userId) throw new HttpError('NOT_FOUND', 'Listing unavailable');
+      const existing = await db.donationRequest.findFirst({ where: { listingId: body.listingId, requesterId: ctx.userId, status: { in: ['pending', 'approved'] } } });
+      if (existing) {
+        const item = await services.requests.get(ctx.userId, existing.id);
+        return { result: { alreadyRequested: true, request: item, committed: false }, parts: [{ kind: 'requests', items: [item] }], reply: `You already have a ${item.status} request for ${listing.title}. Open the existing request below to check its status or message the neighbour.` };
+      }
+      const history = await db.askMessage.findMany({ where: { sessionId: ctx.sessionId }, orderBy: { sequence: 'desc' }, take: 30 });
+      const resultMessage = history.find(message => Array.isArray(message.parts) && (message.parts as Array<{kind?:string}>).some(part => part.kind === 'listings'));
+      const sameName = [...new Map((resultMessage ? z.array(AskPartSchema).parse(resultMessage.parts) : []).flatMap(part => part.kind === 'listings' ? [...part.items, ...(part.search?.fartherItems ?? [])] : []).filter(item => item.title === listing.title).map(item => [item.id, item])).values()];
+      if (sameName.length > 1) {
+        const choice = history.find(message => message.role === 'user' && message.sequence > resultMessage!.sequence && /\b(first|second|third|pertama|kedua|ketiga)\b/i.test(message.text));
+        if (!choice) return { result: { waitingForUser: true, ambiguousListing: true, committed: false }, parts: [{ kind: 'questions', questions: [{ question: `There is more than one listing called ${listing.title}. Which one would you like?`, options: sameName.slice(0, 3).map((_item, index) => `${['First','Second','Third'][index]} ${listing.title}`.slice(0, 100)) }] }] };
+        const selected = /\b(first|pertama)\b/i.test(choice.text) ? 0 : /\b(second|kedua)\b/i.test(choice.text) ? 1 : 2;
+        if (sameName[selected]?.id !== body.listingId) throw new HttpError('VALIDATION_FAILED', 'Use the listing selected by the user, not another listing with the same title');
+      }
       return this.propose(ctx, { kind: 'request_item', body }, listing.title);
     });
     this.add('prepare_request_transition', 'Prepare a request approval, rejection, cancellation or handover review card. Use only a server-allowed action.', z.strictObject({ requestId: z.uuid(), body: DonationRequestTransitionBodySchema }), async (args, ctx) => {
@@ -122,16 +138,22 @@ export class AskTools {
       const previous = await db.askDraft.findUnique({ where: { sessionId_kind: { sessionId: ctx.sessionId, kind: 'listing' } } });
       const latest = await db.askMessage.findFirst({ where: { sessionId: ctx.sessionId, role: 'user' }, orderBy: { sequence: 'desc' } });
       const earlierPhoto = (!previous || !Object.hasOwn(previous.data as object, 'attachmentIds')) && !latest?.attachmentIds.length ? await db.askMessage.findFirst({ where: { sessionId: ctx.sessionId, role: 'user', attachmentIds: { isEmpty: false }, ...(previous ? { createdAt: { lte: previous.updatedAt } } : {}) }, orderBy: { sequence: 'desc' } }) : null;
+      if (args.quantity != null) {
+        const history = await db.askMessage.findMany({ where: { sessionId: ctx.sessionId }, orderBy: { sequence: 'asc' }, select: { role: true, text: true } });
+        if (!quantityWasStated(history, args.quantity)) args.quantity = null;
+      }
       const data = AskListingDraftDataSchema.parse({ title: null, category: null, mode: null, condition: null, quantity: null, description: null, ...(previous?.data as object ?? {}), ...args, ...(includePhotos === false ? { attachmentIds: [] } : latest?.attachmentIds.length ? { attachmentIds: latest.attachmentIds } : earlierPhoto ? { attachmentIds: earlierPhoto.attachmentIds } : {}) });
       const row = await db.askDraft.upsert({ where: { sessionId_kind: { sessionId: ctx.sessionId, kind: 'listing' } }, create: { sessionId: ctx.sessionId, kind: 'listing', data }, update: { data } });
       const attachments = await db.askAttachment.findMany({ where: { sessionId: ctx.sessionId, id: { in: data.attachmentIds } } });
       const draft = AskListingDraftSchema.parse({ ...row, attachments, updatedAt: row.updatedAt.toISOString() });
-      return { result: { draft, publicationAvailable: Boolean(services.marketplace) }, parts: [{ kind: 'listing_draft', draft }] };
+      return { result: { draft, publicationAvailable: Boolean(services.marketplace), ...(data.quantity === null ? { note: 'Quantity has not been stated by the user. Ask how many items; a photo cannot confirm quantity.' } : {}) }, parts: [{ kind: 'listing_draft', draft }] };
     });
     if (services.marketplace) this.add('prepare_publish_listing', 'Prepare publication of the current complete private draft using the caller’s saved Profile pickup location. Ask user to choose saved location first. Requires confirmed condition, quantity, offering and maximum loan days for lending. Preserves draft photos. Creates a confirmation card only, never publishes until user presses Confirm. Custom pickup details use the secure draft form.', z.strictObject({ useSavedLocation: z.literal(true) }), async (_args, ctx) => {
       const row = await db.askDraft.findUnique({ where: { sessionId_kind: { sessionId: ctx.sessionId, kind: 'listing' } } });
       if (!row) throw new HttpError('VALIDATION_FAILED', 'Prepare a listing draft first');
       const draft = AskListingDraftDataSchema.parse(row.data);
+      const history = await db.askMessage.findMany({ where: { sessionId: ctx.sessionId }, orderBy: { sequence: 'asc' }, select: { role: true, text: true } });
+      if (draft.quantity === null || !quantityWasStated(history, draft.quantity)) return { result: { waitingForUser: true, missingFact: 'quantity', committed: false }, parts: [{ kind: 'questions', questions: [{ question: 'How many items are you sharing?', options: ['1', '2', '3'] }] }] };
       if (!Object.hasOwn(row.data as object, 'attachmentIds')) draft.attachmentIds = (await db.askMessage.findFirst({ where: { sessionId: ctx.sessionId, role: 'user', attachmentIds: { isEmpty: false }, createdAt: { lte: row.updatedAt } }, orderBy: { sequence: 'desc' } }))?.attachmentIds.slice(0, 2) ?? [];
       if (!draft.title || !draft.category || !draft.mode || !draft.condition || !draft.quantity || draft.description === null || (draft.mode === 'lend' && !draft.maxLoanDays)) throw new HttpError('VALIDATION_FAILED', 'Ask for missing listing facts before preparing publication');
       const user = await db.user.findUniqueOrThrow({ where: { id: ctx.userId } });
@@ -166,6 +188,12 @@ export class AskTools {
 
   private async propose(ctx: ToolContext, payload: AskActionPayload, summary: string): Promise<ToolResult> {
     const parsed = AskActionPayloadSchema.parse(payload);
+    const pending = await this.db.askAction.findMany({ where: { sessionId: ctx.sessionId, status: 'pending', expiresAt: { gt: new Date() } } });
+    const matching = pending.find(row => isDeepStrictEqual(AskActionPayloadSchema.parse(row.payload), parsed));
+    if (matching) {
+      const action = actionDto(matching);
+      return { result: { action: modelSafe(action), requiresConfirmation: true, committed: false, alreadyPrepared: true }, parts: [{ kind: 'action', action }] };
+    }
     // Supersede only a draft for the same target, preserving independent actions.
     const target = payload.kind === 'transition_request' ? { path: ['requestId'], equals: payload.requestId }
       : payload.kind === 'send_message' ? { path: ['conversationId'], equals: payload.conversationId }

@@ -323,3 +323,15 @@ related product thumbnail and the shared attachment +. Pending photos preview
 with Remove; failures retain retry/remove. Saved items bookmark real listings
 and have a separate page from Saved needs. These refinements retain existing
 tokens, palette, type and mobile navigation.
+
+## Recovery states
+
+Free and Borrow results name their offering in the collapsible heading. Nearby
+counts exclude farther matches, which have a separate label. An empty wider
+check offers no distance reply pills. Same-title products use visible ordinals
+to support a conversational choice. Duplicate-request recovery uses the existing
+information alert and a direct activity link; it does not offer another Confirm.
+Conversation loading failures retain readable messages and offer retry. Keep
+the existing borders, typography, teal actions and dock. The 2026-10-18 browser
+pass inspected phone/desktop recovery states together; functional evidence and
+the real-model quota limit are recorded in docs/ask-recovery.md.

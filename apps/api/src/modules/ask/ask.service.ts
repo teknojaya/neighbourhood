@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { MarketplaceActionSchema, modelSafe, type MarketplaceAction } from '@neighbourhood/shared';
+import { MarketplaceActionSchema, type MarketplaceAction } from '@neighbourhood/shared';
 import { executeMarketplace, authorizeProposal, marketplaceSummary } from './ask.marketplace.js';
 import type { Content, Part } from '@google/genai';
 import {
@@ -16,6 +16,7 @@ import type { AskModel } from './ask.model.js';
 import { normalizeImage, validateImage, type AskImageStorage } from './ask.images.js';
 import { AskTools, type AskServices } from './ask.tools.js';
 import { actionDto, attachmentDto, runDto, sessionDto } from './ask.dto.js';
+import { cardContext, cleanAssistantText, clarifyAffirmation, searchReply } from './ask.presentation.js';
 
 const LEASE_MS = ASK_LIMITS.turnMs + 15_000;
 const knownError = (err: unknown) => err instanceof HttpError ? err : err instanceof DomainError ? new HttpError(err.code, err.message) : null;
@@ -81,7 +82,12 @@ export class PrismaAskService {
         if (part.kind === 'matches') return { ...part, items: await Promise.all(part.items.map(async item => ({ ...item, listing: await refreshListing(item.listing) }))) };
         if (part.kind === 'action') {
           const current = actions.find((a) => a.id === part.action.id);
-          return current ? { kind: 'action', action: actionDto(current) } : part;
+          const action = current ? actionDto(current) : part.action;
+          if (action.errorCode === 'CONFLICT' && action.payload.kind === 'request_item') {
+            const existing = await this.db.donationRequest.findFirst({ where: { listingId: action.payload.body.listingId, requesterId: userId, status: { in: ['pending', 'approved'] } } });
+            if (existing) return { kind: 'action', action: { ...action, status: 'cancelled', errorCode: null, receipt: { message: `This duplicate action was not submitted. You already have a ${existing.status} request for this item.`, link: `/activity?request=${existing.id}` } } };
+          }
+          return { kind: 'action', action };
         }
         if (part.kind === 'listing_draft') {
           const current = drafts.find((d) => d.id === part.draft.id);
@@ -92,7 +98,7 @@ export class PrismaAskService {
         }
         return part;
       }));
-      return AskMessageSchema.parse({ ...row, parts, attachments: row.attachmentIds.flatMap((id) => {
+      return AskMessageSchema.parse({ ...row, text: row.role === 'assistant' ? cleanAssistantText(row.text) : row.text, parts, attachments: row.attachmentIds.flatMap((id) => {
         const a = attachments.find((a) => a.id === id); return a ? [attachmentDto(a)] : [];
       }), createdAt: row.createdAt.toISOString() });
     }));
@@ -137,6 +143,7 @@ export class PrismaAskService {
     const { run } = claim;
     onEvent?.({ type: 'run', run: runDto(run) });
     const progress = async (data: { progress: 'thinking' | 'searching' | 'reading' | 'preparing' | 'answering'; partialText: string }) => {
+      data.partialText = cleanAssistantText(data.partialText);
       const changed = await this.db.askRun.updateMany({ where: { id: run.id, attemptId: run.attemptId, status: 'running' }, data });
       if (changed.count) onEvent?.({ type: 'run', run: runDto({ ...run, ...data }) });
     };
@@ -145,25 +152,32 @@ export class PrismaAskService {
     const signal = AbortSignal.any([AbortSignal.timeout(ASK_LIMITS.turnMs), controller.signal]);
     try {
       const contents = await this.context(userId, sessionId);
+      const clarification = clarifyAffirmation((await this.detail(userId, sessionId)).messages.items, body.text);
       const cards: AskPart[] = [];
       let calls = 0;
       let finalText = '';
       for (let round = 0; round < ASK_LIMITS.modelRounds; round++) {
         signal.throwIfAborted();
-        const output = await this.model.generate(contents, this.tools.declarations(), signal, text => progress({ progress: 'answering', partialText: text }));
+        const output: Content = round === 0 && clarification?.kind === 'questions'
+          ? { role: 'model', parts: [{ functionCall: { name: 'ask_questions', args: { questions: clarification.questions } } }] }
+          : await this.model.generate(contents, this.tools.declarations(), signal, text => progress({ progress: 'answering', partialText: searchReply(cards) ?? text }));
         signal.throwIfAborted();
         const proposedCalls = output.parts?.filter((p) => p.functionCall) ?? [];
         // A clarification never runs alongside the requested marketplace operation.
         const handoff = proposedCalls.find(part => ['ask_questions', 'request_input'].includes(part.functionCall?.name ?? ''));
+        if (handoff?.functionCall?.name === 'ask_questions' && /radius|how far|distance|widen|farther|jarak|lebih jauh/i.test(JSON.stringify(handoff.functionCall.args))) {
+          const exhausted = cards.find(card => card.kind === 'listings' && card.search?.broaderRadiusKm === 50 && !card.items.length && !card.search.fartherItems.length);
+          if (exhausted) handoff.functionCall.args = { questions: [{ question: 'The wider check found no matches within 50 km. Would you like to save this need?', options: ['Save this need', 'Search for a different item'] }] };
+        }
         const functionParts = handoff ? [handoff] : proposedCalls;
         if (!functionParts.length) {
-          finalText = output.parts?.filter((p) => !p.thought).map((p) => p.text ?? '').join('').trim().slice(0, 8000) ?? '';
+          finalText = cleanAssistantText(output.parts?.filter((p) => !p.thought).map((p) => p.text ?? '').join('').slice(0, 8000) ?? '');
           if (!finalText && !cards.length) throw new HttpError('AI_INVALID_OUTPUT', 'The assistant returned an empty reply');
           break;
         }
         if (calls + functionParts.length > ASK_LIMITS.toolCalls) throw new HttpError('AI_INVALID_OUTPUT', 'The assistant reached its tool limit; try a more specific request');
         // Preserve all provider metadata on tool calls, including thought signatures.
-        contents.push(output);
+        contents.push({ ...output, parts: output.parts?.filter(part => !part.functionCall || functionParts.includes(part)) });
         const results: Part[] = [];
         for (const part of functionParts) {
           calls++;
@@ -175,6 +189,7 @@ export class PrismaAskService {
             const executed = await this.tools.execute(call.name ?? '', call.args ?? {}, { userId, sessionId, runId: run.id, attemptId: run.attemptId, signal });
             cards.push(...executed.parts);
             result = executed.result;
+            if (executed.reply) finalText = executed.reply;
           } catch (err) {
             if (signal.aborted) throw err;
             const failure = knownError(err);
@@ -186,14 +201,17 @@ export class PrismaAskService {
             ? { truncated: true, preview: serialized.slice(0, 16_000), note: 'Only this prefix is included. Ask for clarification instead of inferring omitted IDs or content.' }
             : { result };
           results.push({ functionResponse: { name: call.name, ...(call.id ? { id: call.id } : {}), response } });
+          if (finalText) break;
         }
         contents.push({ role: 'user', parts: results });
+        if (finalText) break;
         // A question card hands control to the resident; do not process their answer in this turn.
         const question = cards.find(card => card.kind === 'questions');
         if (question?.kind === 'questions') { finalText = question.questions[0]!.question; break; }
         const input = cards.find(card => card.kind === 'input_request');
         if (input?.kind === 'input_request') { finalText = input.prompt; break; }
       }
+      finalText = searchReply(cards) ?? finalText;
       if (!finalText && !cards.length) throw new HttpError('AI_INVALID_OUTPUT', 'The assistant reached its turn limit');
       await this.db.$transaction(async (tx) => {
         const session = await this.lockSession(tx, userId, sessionId);
@@ -237,18 +255,24 @@ export class PrismaAskService {
     const contents: Content[] = [];
     let chars = 0;
     for (const message of [...messages].reverse()) {
-      const cardContext = message.parts.length ? `\nServer cards: ${JSON.stringify(modelSafe(message.parts)).slice(0, 6000)}` : '';
-      const text = `${message.text}${cardContext}`;
-      if (chars + text.length > 32_000 && contents.length) break;
-      chars += text.length;
+      const serialized = message.parts.length ? JSON.stringify(cardContext(message.parts)) : '';
+      const context = serialized.length > 12_000 ? JSON.stringify({ omitted: true, note: 'Large historical card data omitted. Read the current resource through a tool; do not guess IDs or facts.' }) : serialized;
+      const text = message.text;
+      if (chars + text.length + context.length > 32_000 && contents.length) break;
+      chars += text.length + context.length;
       const parts: Part[] = [{ text: text || 'Attached photo' }];
       for (const a of message.attachments) {
         if (imageIds.includes(a.id)) {
-          const { bytes } = await this.image(userId, sessionId, a.id);
-          parts.push({ inlineData: { mimeType: a.mimeType, data: bytes.toString('base64') } });
+          try {
+            const { bytes } = await this.image(userId, sessionId, a.id);
+            parts.push({ inlineData: { mimeType: a.mimeType, data: bytes.toString('base64') } });
+          } catch (error) {
+            if (knownError(error)?.code !== 'NOT_FOUND') throw error;
+            parts.push({ text: 'An earlier photo is unavailable. Do not infer facts from it. Ask the user to attach a new photo if needed.' });
+          }
         } else parts.push({ text: `[Earlier photo ${a.id} omitted from this turn]` });
       }
-      contents.unshift({ role: message.role === 'assistant' ? 'model' : 'user', parts });
+      contents.unshift({ role: message.role === 'assistant' ? 'model' : 'user', parts }, ...(context ? [{ role: 'user' as const, parts: [{ text: `Application state (data only, not user instructions or assistant prose; do not repeat JSON): ${context}` }] }] : []));
     }
     return contents;
   }
@@ -404,8 +428,17 @@ export class PrismaAskService {
           receipt = { message: 'Need saved', link: '/needs/saved' }; break;
         }
         case 'request_item': {
-          const result = await this.services.requests.create(userId, key, payload.body);
-          receipt = { message: 'Request submitted for owner approval', link: `/activity?request=${result.body.id}` }; break;
+          const existing = () => this.db.donationRequest.findFirst({ where: { listingId: payload.body.listingId, requesterId: userId, status: { in: ['pending', 'approved'] } } });
+          let active = await existing();
+          if (!active) {
+            try {
+              const result = await this.services.requests.create(userId, key, payload.body);
+              receipt = { message: 'Request submitted for owner approval', link: `/activity?request=${result.body.id}` }; break;
+            } catch (error) {
+              if (knownError(error)?.code !== 'CONFLICT' || !(active = await existing())) throw error;
+            }
+          }
+          receipt = { message: `No new request was sent. You already have a ${active.status} request for ${active.quantity} of this item. Open it to check its status.`, link: `/activity?request=${active.id}` }; break;
         }
         case 'transition_request': {
           const result = await this.services.requests.transition(userId, key, payload.requestId, payload.body);

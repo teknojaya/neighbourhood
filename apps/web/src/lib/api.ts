@@ -68,6 +68,7 @@ export async function api<T extends z.ZodType>(path: string, opts: RequestOption
       const e = parsed.data.error;
       throw new ApiError(e.code, e.message, res.status, e.details);
     }
+    if ([502, 503, 504].includes(res.status)) throw new ApiError('NETWORK', 'NeighbourHood is temporarily unavailable. Please try again.', res.status);
     throw new ApiError('BAD_RESPONSE', `Unexpected server response (${res.status})`, res.status);
   }
   const data = opts.schema.safeParse(json);

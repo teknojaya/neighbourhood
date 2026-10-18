@@ -155,7 +155,7 @@ function ActionCard({ action, sessionId }: { action: AskAction; sessionId: strin
     </form>}
     {mutation.isError && <Alert tone="error">{featureError(mutation.error)}</Alert>}
     {action.errorCode && !mutation.isError && <Alert tone="error">{featureError(new ApiError(action.errorCode, '', 0))}</Alert>}
-    {action.receipt && <Alert tone="success">{action.receipt.message}{action.receipt.link && <Link className="ml-2 underline" to={action.receipt.link}>{t('notifications.open')}</Link>}</Alert>}
+    {action.receipt && <Alert tone={action.status === 'completed' ? 'success' : 'info'}>{action.receipt.message}{action.receipt.link && <Link className="ml-2 underline" to={action.receipt.link}>{t('notifications.open')}</Link>}</Alert>}
     {pending && <>
       <p className="text-xs text-stone-500">{t('ask.reviewHint')}</p>
       {isHandover && <label className="flex gap-2 text-sm"><input type="checkbox" checked={handedOver} onChange={(event) => setHandedOver(event.target.checked)} />{isMarketplaceHandover ? 'I checked this handover or inventory change in person.' : t('ask.handoverCheck')}</label>}
@@ -166,6 +166,6 @@ function ActionCard({ action, sessionId }: { action: AskAction; sessionId: strin
       </div>
     </>}
     {action.status === 'executing' && <><Alert>{t('ask.actionRunning')}</Alert><Button type="button" variant="secondary" disabled={mutation.isPending || !online} onClick={() => mutation.mutate({ operation: 'confirm' })}>{t('ask.checkAction')}</Button></>}
-    {(action.status === 'cancelled' || action.status === 'expired') && <p className="text-sm text-stone-500">{t(`ask.actionState.${action.status}`)}</p>}
+    {!action.receipt && (action.status === 'cancelled' || action.status === 'expired') && <p className="text-sm text-stone-500">{t(`ask.actionState.${action.status}`)}</p>}
   </Card>;
 }

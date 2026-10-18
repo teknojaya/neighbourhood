@@ -147,78 +147,65 @@ export function ListingFormModal({
       setIsSubmitting(true);
       if (!existingListing && (!defaultLocation || !(pointInventory?.areaLabel ?? defaultArea).trim())) throw new Error('Set your pickup location and public area in Profile before sharing an item.');
 
-      if (existingListing) {
-        // Edit mode
-        await updateListing(existingListing.id, {
-          title: title.trim(),
-          description: description.trim(),
-          condition,
-          quantity: mode === 'lend' ? 1 : quantity,
-          areaLabel: areaLabel.trim(),
-          pickupInstructions: pickupInstructions.trim(),
-          bestBefore: bestBefore || null,
-          lending: mode === 'lend' ? { maxLoanDays, depositRequired: false, notes: null } : null,
-          appliance:
-            category === 'appliances'
-              ? {
-                  workingStatus: applianceStatus,
-                  brand: applianceBrand.trim() || null,
-                  model: applianceModel || null,
-                  dimensionsCm: dimensions.width && dimensions.height && dimensions.depth ? { width: Number(dimensions.width), height: Number(dimensions.height), depth: Number(dimensions.depth) } : null,
-                  approxWeightKg: applianceWeight ? Number(applianceWeight) : null,
-                  powerRequirement: powerRequirement || null,
-                  access: {
-                    floorLevel: floor ? Number(floor) : null,
-                    elevatorAvailable: elevator,
-                    requiresDismantling: dismantling,
-                    requiresInstallation: installation,
-                    suggestedHelpers: helpers ? Number(helpers) : null,
-                    notes: accessNotes || null,
-                  },
-                }
-              : null,
-        });
+        const appliancePayload = category === 'appliances'
+          ? {
+              workingStatus: applianceStatus,
+              brand: applianceBrand.trim() || null,
+              model: applianceModel.trim() || null,
+              dimensionsCm:
+                dimensions.width && dimensions.height && dimensions.depth &&
+                Number(dimensions.width) > 0 && Number(dimensions.height) > 0 && Number(dimensions.depth) > 0
+                  ? { width: Number(dimensions.width), height: Number(dimensions.height), depth: Number(dimensions.depth) }
+                  : null,
+              approxWeightKg: applianceWeight && Number(applianceWeight) > 0 ? Number(applianceWeight) : null,
+              powerRequirement: powerRequirement.trim() || null,
+              access: {
+                floorLevel: floor !== '' && !isNaN(Number(floor)) ? Math.round(Number(floor)) : null,
+                elevatorAvailable: elevator,
+                requiresDismantling: dismantling,
+                requiresInstallation: installation,
+                suggestedHelpers: helpers && Number(helpers) >= 1 && Number(helpers) <= 6 ? Math.round(Number(helpers)) : null,
+                notes: accessNotes.trim() || null,
+              },
+            }
+          : null;
 
-        // Upload photo if a new file was chosen
-        if (photoFile) {
-          await uploadListingPhoto(existingListing.id, photoFile, photoKey.current);
-        }
-      } else {
-        // Create mode
-        const payload: CreateListingBody = {
-          pointInventoryItemId: pointInventory?.itemId ?? null,
-          mode,
-          category,
-          title: title.trim(),
-          description: description.trim(),
-          condition,
-          quantity: mode === 'lend' ? 1 : Number(quantity),
-          areaLabel: pointInventory?.areaLabel ?? defaultArea,
-          exactLocation: defaultLocation!,
-          pickupInstructions: pickupInstructions.trim(),
-          collection: pointInventory ? { method: 'community_point', communityPointId: pointInventory.pointId } : { method: 'owner_location', communityPointId: null },
-          bestBefore: bestBefore || null,
-          lending: mode === 'lend' ? { maxLoanDays, depositRequired: false, notes: null } : null,
-          appliance:
-            category === 'appliances'
-              ? {
-                  workingStatus: applianceStatus,
-                  brand: applianceBrand.trim() || null,
-                  model: applianceModel || null,
-                  dimensionsCm: dimensions.width && dimensions.height && dimensions.depth ? { width: Number(dimensions.width), height: Number(dimensions.height), depth: Number(dimensions.depth) } : null,
-                  approxWeightKg: applianceWeight ? Number(applianceWeight) : null,
-                  powerRequirement: powerRequirement || null,
-                  access: {
-                    floorLevel: floor ? Number(floor) : null,
-                    elevatorAvailable: elevator,
-                    requiresDismantling: dismantling,
-                    requiresInstallation: installation,
-                    suggestedHelpers: helpers ? Number(helpers) : null,
-                    notes: accessNotes || null,
-                  },
-                }
-              : null,
-        };
+        if (existingListing) {
+          // Edit mode
+          await updateListing(existingListing.id, {
+            title: title.trim(),
+            description: description.trim(),
+            condition,
+            quantity: mode === 'lend' ? 1 : quantity,
+            areaLabel: areaLabel.trim(),
+            pickupInstructions: pickupInstructions.trim(),
+            bestBefore: bestBefore || null,
+            lending: mode === 'lend' ? { maxLoanDays, depositRequired: false, notes: null } : null,
+            appliance: appliancePayload,
+          });
+
+          // Upload photo if a new file was chosen
+          if (photoFile) {
+            await uploadListingPhoto(existingListing.id, photoFile, photoKey.current);
+          }
+        } else {
+          // Create mode
+          const payload: CreateListingBody = {
+            pointInventoryItemId: pointInventory?.itemId ?? null,
+            mode,
+            category,
+            title: title.trim(),
+            description: description.trim(),
+            condition,
+            quantity: mode === 'lend' ? 1 : Number(quantity),
+            areaLabel: pointInventory?.areaLabel ?? defaultArea,
+            exactLocation: defaultLocation!,
+            pickupInstructions: pickupInstructions.trim(),
+            collection: pointInventory ? { method: 'community_point', communityPointId: pointInventory.pointId } : { method: 'owner_location', communityPointId: null },
+            bestBefore: bestBefore || null,
+            lending: mode === 'lend' ? { maxLoanDays, depositRequired: false, notes: null } : null,
+            appliance: appliancePayload,
+          };
 
         if (onPrepare) {
           await onPrepare(payload, photoFile ?? undefined);

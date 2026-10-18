@@ -36,7 +36,7 @@ import { askRouter } from './modules/ask/ask.routes.js';
 import type { AskService } from './modules/ask/ask.service.js';
 import type { ListingsService } from './modules/listings/listings.service.js';
 import { storageReadRouter } from './modules/storage/storage.routes.js';
-import type { FirebaseObjectStorage } from './lib/storage.js';
+import type { VerifiableObjectStorage } from './lib/storage.js';
 
 export interface AppDeps {
   config: AppConfig;
@@ -57,7 +57,7 @@ export interface AppDeps {
   communities?: CommunitiesService;
   ask?: AskService;
   listings?: ListingsService;
-  photoStorage?: FirebaseObjectStorage;
+  photoStorage?: VerifiableObjectStorage;
 }
 
 export function createApp(deps: AppDeps): Express {

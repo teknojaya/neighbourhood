@@ -6,24 +6,24 @@ import { createDb } from './lib/db.js';
 import { MaintenanceService } from './modules/notifications/maintenance.service.js';
 import { FcmPushSender } from './modules/notifications/push.adapter.js';
 import { PrismaAskService } from './modules/ask/ask.service.js';
-import { FirebaseAskImageStorage } from './modules/ask/ask.images.js';
+import { createStorageBundle } from './lib/storage-bundle.js';
 import { PrismaRequestsService } from './modules/requests/requests.service.js';
 import { PrismaNeedsService } from './modules/needs/needs.service.js';
 import { PrismaConversationsService } from './modules/conversations/conversations.service.js';
 import { PrismaNotificationsService } from './modules/notifications/notifications.service.js';
 import { logger } from './lib/logger.js';
-import { FirebaseObjectStorage } from './lib/storage.js';
 
 const config = loadConfig();
 const db = createDb(config.databaseUrl!);
 const app = initializeApp({ projectId: config.firebase.projectId, storageBucket: config.firebase.storageBucket });
 try {
+  const storage = createStorageBundle(config, getStorage(app));
   const result = await new MaintenanceService(db, process.env.PUSH_ENABLED === 'true' && !config.firebase.useEmulators ? new FcmPushSender(getMessaging(app)) : null).run();
-  const ask = new PrismaAskService(db, null, config.firebase.storageBucket ? new FirebaseAskImageStorage(getStorage(app), config.firebase.storageBucket) : null, { requests: new PrismaRequestsService(db), needs: new PrismaNeedsService(db), conversations: new PrismaConversationsService(db), notifications: new PrismaNotificationsService(db) });
+  const ask = new PrismaAskService(db, null, storage.ask, { requests: new PrismaRequestsService(db), needs: new PrismaNeedsService(db), conversations: new PrismaConversationsService(db), notifications: new PrismaNotificationsService(db) });
   const sessions = await ask.purgeDeletedSessions(), orphaned = await ask.purgeOrphanedImages();
-  await new PrismaConversationsService(db, config.firebase.storageBucket ? new FirebaseAskImageStorage(getStorage(app), config.firebase.storageBucket, 'conversation-attachments/') : null).cleanupAttachments();
-  if (config.firebase.storageBucket) {
-    const bucket = new FirebaseObjectStorage(getStorage(app), config.firebase.storageBucket);
+  await new PrismaConversationsService(db, storage.conversations).cleanupAttachments();
+  {
+    const bucket = storage.photos;
     for await (const photo of bucket.candidates()) if (Number.isFinite(photo.createdAt.getTime()) && Date.now() - photo.createdAt.getTime() > 86_400_000 && await db.listingPhoto.count({ where: { storagePath: photo.path } }) === 0) await bucket.remove(photo.path);
   }
   logger.info('maintenance_completed', { ...result, sessions, orphaned });

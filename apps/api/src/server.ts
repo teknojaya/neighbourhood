@@ -8,7 +8,7 @@ import { createApp } from './app.js';
 import { ConfigError, loadConfig } from './config.js';
 import { createDb } from './lib/db.js';
 import { logger } from './lib/logger.js';
-import { FirebaseObjectStorage } from './lib/storage.js';
+import { createStorageBundle } from './lib/storage-bundle.js';
 import { AiService } from './modules/ai/ai.service.js';
 import { GeminiAdapter } from './modules/ai/gemini.adapter.js';
 import { PrismaAccessRepository } from './modules/auth/access.js';
@@ -30,7 +30,6 @@ import { PrismaNotificationsService } from './modules/notifications/notification
 import { PrismaNeedsService } from './modules/needs/needs.service.js';
 import { PrismaAskService } from './modules/ask/ask.service.js';
 import { GeminiAskModel } from './modules/ask/ask.model.js';
-import { FirebaseAskImageStorage } from './modules/ask/ask.images.js';
 
 function main() {
   // Safe environment loading for local development
@@ -78,15 +77,15 @@ function main() {
     Boolean(config.firebase.projectId),
   );
 
-  const photoStorage = config.firebase.storageBucket ? new FirebaseObjectStorage(getStorage(firebaseApp), config.firebase.storageBucket,
-    process.env.STORAGE_SIGNING_SECRET ? Buffer.from(process.env.STORAGE_SIGNING_SECRET) : undefined) : undefined;
+  const storage = createStorageBundle(config, getStorage(firebaseApp));
+  const photoStorage = storage.photos;
   const listings = new ListingsService(db, photoStorage);
   const matching = new MatchingService(db, listings, generator);
 
-  const services = { loans: new LoansService(db), communities: new CommunitiesService(db), needs: new PrismaNeedsService(db), requests: new PrismaRequestsService(db), conversations: new PrismaConversationsService(db, config.firebase.storageBucket ? new FirebaseAskImageStorage(getStorage(firebaseApp), config.firebase.storageBucket, 'conversation-attachments/') : null, photoStorage), notifications: new PrismaNotificationsService(db) };
+  const services = { loans: new LoansService(db), communities: new CommunitiesService(db), needs: new PrismaNeedsService(db), requests: new PrismaRequestsService(db), conversations: new PrismaConversationsService(db, storage.conversations, photoStorage), notifications: new PrismaNotificationsService(db) };
   const askServices = { ...services, marketplace: { listings, loans: services.loans, communities: services.communities, matching }, listings: { get: async (userId: string, id: string) => (await listings.getListingDetail(userId, id)).listing } };
   const ask = new PrismaAskService(db, config.gemini ? new GeminiAskModel(config.gemini.model, config.gemini.apiKey) : null,
-    config.firebase.storageBucket ? new FirebaseAskImageStorage(getStorage(firebaseApp), config.firebase.storageBucket) : null, askServices);
+    storage.ask, askServices);
   // Storage cleanup is retryable; soft-deleted chats are never readable meanwhile.
   void ask.purgeDeletedSessions().catch(() => logger.warn('ask_cleanup_unavailable'));
   const cleanup = setInterval(() => { void ask.purgeDeletedSessions().catch(() => logger.warn('ask_cleanup_unavailable')); void services.conversations.cleanupAttachments().catch(() => logger.warn('message_photo_cleanup_unavailable')); }, 15 * 60_000);
@@ -116,6 +115,7 @@ function main() {
       port: config.port,
       env: config.env,
       authEmulator: config.firebase.useEmulators,
+      storageDriver: storage.driver,
       aiAvailable: generator !== null,
       aiModel: config.gemini?.model ?? null,
       emailOtpAvailable: config.emailOtp !== null,

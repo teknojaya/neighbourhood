@@ -10,12 +10,11 @@ import { geohashFor, NeedsExtractionSchema, type ItemCategory, type LatLng } fro
 import { loadConfig } from '../src/config.js';
 import { createDb, type Prisma } from '../src/lib/db.js';
 import { PrismaAskService } from '../src/modules/ask/ask.service.js';
-import { FirebaseAskImageStorage } from '../src/modules/ask/ask.images.js';
 import { PrismaNeedsService } from '../src/modules/needs/needs.service.js';
 import { PrismaRequestsService } from '../src/modules/requests/requests.service.js';
 import { PrismaConversationsService } from '../src/modules/conversations/conversations.service.js';
 import { PrismaNotificationsService } from '../src/modules/notifications/notifications.service.js';
-import { FirebaseObjectStorage } from '../src/lib/storage.js';
+import { createStorageBundle } from '../src/lib/storage-bundle.js';
 import { ListingsService } from '../src/modules/listings/listings.service.js';
 import { normalizeImage } from '../src/modules/ask/ask.images.js';
 
@@ -55,7 +54,7 @@ try {
   for(const who of [moderator,...(target&&args.includes('--grant-staff')?[target]:[])])for(const role of ['staff','product_category_editor'] as const)await db.userRole.upsert({where:{userId_role:{userId:who.id,role}},create:{userId:who.id,role},update:{}});
   const namespace=(target?.id??'default')+(option('--scenario')?':'+option('--scenario'):'');
   const bundledPhotos=fileURLToPath(new URL('../seed-assets/products/',import.meta.url));
-  const photoStorage=new FirebaseObjectStorage(getStorage(app),config.firebase.storageBucket);
+  const storage=createStorageBundle(config,getStorage(app)); const photoStorage=storage.photos;
   const listingService=new ListingsService(db,photoStorage);
   const photoFor=(title:string)=> /books/i.test(title)?'picture-books':/pantry|rice and beans/i.test(title)?'pantry-staples':/jacket|scarf/i.test(title)?'cotton-clothing':/plates|bowls/i.test(title)?'tableware':/rice cooker/i.test(title)?'rice-cooker':/tool|drill/i.test(title)?'tool-kit':/walking aid/i.test(title)?'walking-aid':null;
   async function attachPhoto(item:{id:string;ownerId:string;title:string}){
@@ -64,7 +63,7 @@ try {
     if(!asset&&!custom)return;
     const file=custom?path.join(custom,item.title.toLowerCase().replace(/[^a-z0-9]+/g,'-')+'.jpg'):path.join(bundledPhotos,asset+'.jpg');
     try{
-      if(existing){if(!(await getStorage(app).bucket(config.firebase.storageBucket).file(existing.storagePath).exists())[0])await photoStorage.put(existing.storagePath,await normalizeImage(await readFile(file),'image/jpeg'),'image/webp');return;}
+      if(existing){try{await photoStorage.get(existing.storagePath);}catch(error){const code=(error as {code?:number|string}).code;if(!['NOT_FOUND',404,'ENOENT'].includes(code!))throw error;await photoStorage.put(existing.storagePath,await normalizeImage(await readFile(file),'image/jpeg'),'image/webp');}return;}
       await listingService.uploadPhoto(item.ownerId,item.id,await readFile(file),'image/jpeg','playground_photo_'+item.id+'_v1');
     }catch(error){if(!custom||(error as {code?:string}).code!=='ENOENT')throw error;}
   }
@@ -83,7 +82,7 @@ try {
   const catalog:[string,ItemCategory,number,'donate'|'lend'][]=[['Picture books','books',0.5,'donate'],['Rice and pantry staples','groceries',1.2,'donate'],['Cotton jackets','clothing',1.8,'donate'],['Dinner plates','household',2.2,'donate'],['Rice cooker','appliances',2.6,'donate'],['Walking aid','mobility_aids',2.8,'lend'],['Cordless drill','household',4.5,'lend'],['Folding table','household',6.5,'lend'],['Children books','books',9,'donate'],['Sewing machine','appliances',16,'lend'],['Camping tent','household',28,'lend'],['Bicycle helmet','household',44,'donate'],['Garden trolley','household',65,'lend']];
   const catalogRows=[];for(const [index,[title,category,km,mode]] of catalog.entries())catalogRows.push(await listing('catalog:'+index,index%2?owner.id:neighbour.id,title,category,km,mode));
   const needs=new PrismaNeedsService(db);const requests=new PrismaRequestsService(db);const conversations=new PrismaConversationsService(db);const notifications=new PrismaNotificationsService(db);
-  const ask=new PrismaAskService(db,null,new FirebaseAskImageStorage(getStorage(app),config.firebase.storageBucket),{needs,requests,conversations,notifications});
+  const ask=new PrismaAskService(db,null,storage.ask,{needs,requests,conversations,notifications});
   for(const who of audiences){
     const counterpart=who.id===owner.id?neighbour:owner;
     for(const item of catalogRows.filter(item=>item.ownerId!==who.id).slice(0,3))await db.savedListing.upsert({where:{userId_listingId:{userId:who.id,listingId:item.id}},create:{userId:who.id,listingId:item.id,title:item.title},update:{}});

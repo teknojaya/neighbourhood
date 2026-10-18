@@ -30,6 +30,12 @@ async function user(name) {
 }
 async function login(who) {
   const context = await browser.newContext({ viewport: { width: 440, height: 956 }, reducedMotion: 'reduce' }); await stubMapTiles(context); const page = await context.newPage(); page.setDefaultTimeout(20000); page.on('pageerror', error => errors.push(error.message));
+  // Keep browser and fixture requests on the same explicitly selected local API.
+  await page.route('**/api/v1/**', async route => {
+    const source = new URL(route.request().url());
+    const response = await route.fetch({ url: new URL(source.pathname + source.search, base).href });
+    await route.fulfill({ response });
+  });
   await page.goto(web + '/login'); await page.evaluate(async custom => { const { getFirebaseAuth } = await import('/src/lib/firebase.ts'); const { signInWithCustomToken } = await import('/node_modules/.vite/deps/firebase_auth.js'); await signInWithCustomToken(getFirebaseAuth(), custom); }, who.custom); await page.waitForURL(url => url.pathname === '/'); return page;
 }
 async function shot(page, name) { assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Horizontal overflow'); await page.screenshot({ path: path.join(out, name + '.png'), fullPage: true }); }

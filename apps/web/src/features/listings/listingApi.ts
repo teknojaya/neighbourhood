@@ -21,10 +21,10 @@ const MyListingsResponseSchema = z.object({
   total: z.number(),
 });
 
+// Server returns photoId and storagePath after a successful direct upload
 const PhotoUploadResponseSchema = z.object({
   photoId: z.string(),
   storagePath: z.string(),
-  uploadUrl: z.string(),
 });
 
 /**

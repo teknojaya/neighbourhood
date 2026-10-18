@@ -217,8 +217,16 @@ describe('integrated marketplace against PostgreSQL', () => {
     const f = await fixture(); const listing = await f.listings.createListing(f.owner.id, { ...body(), mode: 'lend', quantity: 1, lending: { maxLoanDays: 7, notes: null, depositRequired: false } });
     const a = await f.loans.create(f.neighbour.id, randomUUID(), { listingId: listing.id, startDate: day(0), endDate: day(2), message: '' });
     const b = await f.loans.create(f.outsider.id, randomUUID(), { listingId: listing.id, startDate: day(1), endDate: day(3), message: '' });
+    const incoming = await request(f.app).get('/api/v1/loans/incoming').set('Authorization', bearer(f.owner.firebaseUid)).expect(200);
+    expect(incoming.body.items.map((item: { id: string }) => item.id)).toEqual(expect.arrayContaining([a.body.id, b.body.id]));
+    const outgoing = await request(f.app).get('/api/v1/loans/outgoing').set('Authorization', bearer(f.neighbour.firebaseUid)).expect(200);
+    expect(outgoing.body.items.map((item: { id: string }) => item.id)).toEqual([a.body.id]);
     const outcomes = await Promise.allSettled([f.loans.transition(f.owner.id, randomUUID(), a.body.id, { to: 'approved' }), f.loans.transition(f.owner.id, randomUUID(), b.body.id, { to: 'approved' })]);
     expect(outcomes.filter(o => o.status === 'fulfilled')).toHaveLength(1);
+    const availability = await request(f.app).get(`/api/v1/listings/${listing.id}/availability`).set('Authorization', bearer(f.neighbour.firebaseUid)).expect(200);
+    const alias = await request(f.app).get(`/api/v1/loans/listing/${listing.id}/booked`).set('Authorization', bearer(f.neighbour.firebaseUid)).expect(200);
+    expect(alias.body).toEqual(availability.body); expect(alias.body.booked).toHaveLength(1); expect(alias.body.booked).toEqual(alias.body.items);
+    expect(JSON.stringify(alias.body)).not.toMatch(/borrowerId|ownerId|message|pickup/);
     if (outcomes[0]!.status === 'fulfilled') { await f.loans.transition(f.owner.id, randomUUID(), a.body.id, { to: 'checked_out' }); await f.loans.transition(f.owner.id, randomUUID(), a.body.id, { to: 'returned', returnConditionNote: 'Working and clean' }); expect((await f.loans.get(f.neighbour.id, a.body.id)).status).toBe('returned'); }
     await request(f.app).get(`/api/v1/loans/${a.body.id}`).set('Authorization', bearer(f.outsider.firebaseUid)).expect(404);
     const inbox = await request(f.app).get('/api/v1/notifications').set('Authorization', bearer(f.owner.firebaseUid)).expect(200); expect(inbox.body.items.some((item: { type: string }) => item.type === 'loan_update')).toBe(true);

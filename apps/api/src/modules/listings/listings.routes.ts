@@ -113,10 +113,47 @@ export function listingsRouter(service?: ListingsService): Router {
     }
   });
 
-  router.get('/listings/:listingId/pickup', async (req, res) => { res.json(await service.pickup(authUser(req).userId, uuidParam(req, 'listingId'))); });
-  router.post('/listings/:listingId/photos', express.raw({ type: [...AI_LIMITS.imageMimeTypes], limit: AI_LIMITS.imageMaxBytes }), async (req, res) => {
-    res.status(201).json(await service.uploadPhoto(authUser(req).userId, uuidParam(req, 'listingId'), req.body, (req.get('Content-Type') ?? '').split(';')[0]!, idempotencyKey(req)));
+  // Return private pickup instructions to the listing owner
+  router.get('/listings/:listingId/pickup', async (req, res, next) => {
+    try {
+      const user = authUser(req);
+      const listingId = uuidParam(req, 'listingId');
+      res.json(await service.pickup(user.userId, listingId));
+    } catch (err) {
+      next(err);
+    }
   });
-  router.delete('/listings/:listingId/photos/:photoId', async (req, res) => { res.json(await service.removePhoto(authUser(req).userId, uuidParam(req, 'listingId'), uuidParam(req, 'photoId'), idempotencyKey(req))); });
+
+  // Upload a binary photo directly to storage and record the path in DB
+  router.post(
+    '/listings/:listingId/photos',
+    express.raw({ type: [...AI_LIMITS.imageMimeTypes], limit: AI_LIMITS.imageMaxBytes }),
+    async (req, res, next) => {
+      try {
+        const user = authUser(req);
+        const listingId = uuidParam(req, 'listingId');
+        const mimeType = (req.get('Content-Type') ?? '').split(';')[0]!;
+        const key = idempotencyKey(req);
+        const result = await service.uploadPhoto(user.userId, listingId, req.body, mimeType, key);
+        res.status(201).json(result);
+      } catch (err) {
+        next(err);
+      }
+    },
+  );
+
+  // Remove a specific photo from storage and DB
+  router.delete('/listings/:listingId/photos/:photoId', async (req, res, next) => {
+    try {
+      const user = authUser(req);
+      const listingId = uuidParam(req, 'listingId');
+      const photoId = uuidParam(req, 'photoId');
+      const key = idempotencyKey(req);
+      res.json(await service.removePhoto(user.userId, listingId, photoId, key));
+    } catch (err) {
+      next(err);
+    }
+  });
+
   return router;
 }

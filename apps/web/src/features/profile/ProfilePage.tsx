@@ -7,6 +7,8 @@ import { Alert, Button, Card, PageHeading, Skeleton, TextField } from '../../com
 import { t } from '../../i18n';
 import { ApiError } from '../../lib/api';
 import { useOnline } from '../../lib/useOnline';
+import { BookmarkIcon, BoxIcon, ChevronRightIcon, GiftIcon, MapIcon, PinIcon, UserIcon } from '../../components/icons';
+import { ProfileLocationDialog } from './ProfileLocationDialog';
 
 export function ProfilePage() {
   const { signOut, linkGoogle } = useAuth();
@@ -22,6 +24,7 @@ export function ProfilePage() {
   const [radius, setRadius] = useState(String(DEFAULT_RADIUS_KM));
   const [language, setLanguage] = useState<UiLanguage>('en');
   const [geoState, setGeoState] = useState<'idle' | 'locating' | 'unavailable'>('idle');
+  const [locationOpen, setLocationOpen] = useState(false);
 
   const profile = me.data?.profile;
   useEffect(() => {
@@ -63,19 +66,31 @@ export function ProfilePage() {
   return (
     <div className="space-y-4">
       <PageHeading title={profile?.displayName ? t('profile.title') : t('profile.setupTitle')}>Your neighbourhood, preferences and account.</PageHeading>
-      <Link to="/saved-items" className="inline-flex min-h-11 items-center text-sm font-semibold text-brand-800 underline">Saved items</Link>
-      <div className="flex flex-wrap gap-x-5 gap-y-1 border-b border-stone-200 pb-3 text-sm font-semibold text-brand-800"><Link className="inline-flex min-h-11 items-center underline" to="/needs/saved">Saved needs</Link><Link className="inline-flex min-h-11 items-center underline" to="/communities">Communities & points</Link><Link className="inline-flex min-h-11 items-center underline" to="/categories">Product categories</Link></div>
-      {me.data?.email && <p className="text-sm text-stone-600">{t('profile.email', { email: me.data.email })}</p>}
+      {profile && <section className="flex items-center gap-3 border-b border-stone-200 pb-4"><span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xl font-semibold text-brand-800">{profile.displayName?.slice(0, 1).toUpperCase() || <UserIcon />}</span><div className="min-w-0"><h2 className="break-words font-semibold">{profile.displayName || 'Set up your profile'}</h2><p className="break-words text-sm text-stone-600">{me.data?.email}</p></div></section>}
+      <nav aria-label="Your neighbourhood" className="divide-y divide-stone-200 rounded-2xl border border-stone-200 bg-white px-4">
+        {[
+          { to: '/saved-items', label: 'Saved items', detail: 'Goods you want to come back to', icon: BookmarkIcon },
+          { to: '/activity?tab=giving', label: 'My shared items', detail: 'Manage your donations and lending', icon: GiftIcon },
+          { to: '/needs/saved', label: 'Saved needs', detail: 'Things you are still looking for', icon: BookmarkIcon },
+          { to: '/communities', label: 'Communities & points', detail: 'Your groups and local collection points', icon: MapIcon },
+          { to: '/categories', label: 'Product categories', detail: 'Browse by the kind of item', icon: BoxIcon },
+        ].map(({ to, label, detail, icon: Icon }) => <Link key={to} to={to} className="flex min-h-16 items-center gap-3 py-3 hover:text-brand-800"><span className="text-brand-700"><Icon /></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{label}</span><span className="block text-sm text-stone-600">{detail}</span></span><span className="text-stone-500"><ChevronRightIcon /></span></Link>)}
+      </nav>
+      <section className="space-y-2 border-b border-stone-200 py-3"><h2 className="flex items-center gap-2 font-semibold"><PinIcon />Your search area</h2><p className="text-sm text-stone-600">{profile?.homeLocation ? `${profile.areaLabel || 'Location set'} · within ${profile.searchRadiusKm} km` : 'Set a location to discover items nearby.'}</p><p className="text-sm text-stone-600">Your exact home location stays private.</p><Button type="button" variant="secondary" onClick={() => setLocationOpen(true)}>Choose location</Button></section>
+      {locationOpen && <ProfileLocationDialog onClose={() => setLocationOpen(false)} onSaved={() => setLocationOpen(false)} />}
       {profile && !profile.displayName && <Alert tone="info">{t('profile.needsName')}</Alert>}
       {me.isError && <Alert tone="error">{t('error.generic')}</Alert>}
       {me.isPending && <Skeleton cards={2} />}
 
       <Card>
+        <details open={!profile?.displayName || undefined}>
+        <summary className="cursor-pointer py-1 font-semibold">Edit profile & preferences</summary>
         <form className="space-y-4" onSubmit={onSubmit}>
+          <h2 className="pt-4 text-sm font-semibold text-stone-600">Profile details</h2>
           <TextField label={t('auth.displayName')} value={displayName} onChange={(e) => setDisplayName(e.target.value)} minLength={2} maxLength={60} required />
           <TextField label="Neighbourhood / city / region" hint="Shown on your listings, for example: Tebet, South Jakarta. Keep your exact address private." value={areaLabel} onChange={(e) => setAreaLabel(e.target.value)} maxLength={120} />
 
-          <fieldset className="space-y-2">
+          <fieldset className="space-y-2 border-t border-stone-200 pt-4">
             <legend className="text-sm font-medium">{t('profile.location')}</legend>
             <p className="text-xs text-stone-500">{t('profile.locationHint')}</p>
             <div className="flex flex-wrap gap-2">
@@ -96,7 +111,7 @@ export function ProfilePage() {
             </div></details>
           </fieldset>
 
-          <fieldset className="space-y-2">
+          <fieldset className="space-y-2 border-t border-stone-200 pt-4">
             <legend className="text-sm font-medium">{t('profile.radius')}</legend>
             <div className="grid grid-cols-4 gap-2">
               {RADIUS_OPTIONS_KM.map((km) => (
@@ -127,6 +142,7 @@ export function ProfilePage() {
             {save.isPending ? t('common.saving') : t('common.save')}
           </Button>
         </form>
+        </details>
       </Card>
 
       {me.data && (

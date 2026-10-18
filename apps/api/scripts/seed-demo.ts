@@ -1,5 +1,9 @@
 import { initializeApp, deleteApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
+import { getStorage } from 'firebase-admin/storage';
+import { readFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { createStorageBundle } from '../src/lib/storage-bundle.js';
 import { loadConfig } from '../src/config.js';
 import { createDb } from '../src/lib/db.js';
 import { ListingsService } from '../src/modules/listings/listings.service.js';
@@ -17,11 +21,15 @@ try {
   }
   const [owner, neighbour, volunteer] = people;
   await db.userRole.upsert({ where: { userId_role: { userId: volunteer!.id, role: 'staff' } }, create: { userId: volunteer!.id, role: 'staff' }, update: {} });
-  const listings = new ListingsService(db);
+  const listings = new ListingsService(db, createStorageBundle(config, getStorage(app)).photos);
   const base = CreateListingBodySchema.parse({ mode: 'donate', category: 'books', title: 'Picture books for a new reader', description: 'A set of illustrated children books in good condition.', condition: 'good', quantity: 4, areaLabel: 'Demo neighbourhood', exactLocation: { lat: -6.2, lng: 106.816 }, pickupInstructions: 'Demo fixture: arrange a pickup time in chat.', collection: { method: 'owner_location', communityPointId: null } });
   const marker = await db.listing.findFirst({ where: { ownerId: owner!.id, title: base.title } });
-  if (!marker) await listings.createListing(owner!.id, base, 'demo_books_v1');
-  if (!await db.listing.findFirst({ where: { ownerId: owner!.id, title: 'Borrow a household tool set' } })) await listings.createListing(owner!.id, { ...base, title: 'Borrow a household tool set', description: 'Basic household hand tools for small projects. Return clean and complete.', category: 'household', mode: 'lend', quantity: 1, lending: { maxLoanDays: 7, depositRequired: false, notes: 'Return all pieces.' } }, 'demo_tools_v1');
+  if (!marker) await listings.createListing(owner!.id, base, 'demo_books_'+randomUUID());
+  if (!await db.listing.findFirst({ where: { ownerId: owner!.id, title: 'Borrow a household tool set' } })) await listings.createListing(owner!.id, { ...base, title: 'Borrow a household tool set', description: 'Basic household hand tools for small projects. Return clean and complete.', category: 'household', mode: 'lend', quantity: 1, lending: { maxLoanDays: 7, depositRequired: false, notes: 'Return all pieces.' } }, 'demo_tools_'+randomUUID());
+  for (const item of await db.listing.findMany({ where: { ownerId: owner!.id, title: { in: [base.title, 'Borrow a household tool set'] } }, include: { photos: true } })) {
+    if (!item.photos.length) await listings.uploadPhoto(owner!.id, item.id, await readFile(new URL(`../seed-assets/products/${item.category === 'books' ? 'picture-books' : 'tool-kit'}.jpg`, import.meta.url)), 'image/jpeg', `seed_photo_${item.id}_${randomUUID()}`);
+    if (item.status === 'draft') await listings.transitionStatus(owner!.id, item.id, 'active', `seed_publish_${item.id}`);
+  }
   const communities = new CommunitiesService(db);
   let community = await db.community.findFirst({ where: { name: 'Demo sharing circle' } });
   if (!community) { const created = await communities.create(volunteer!.id, 'demo_community_v1', { name: 'Demo sharing circle', areaLabel: 'Demo neighbourhood', description: 'Local demo community with a partner pantry.', joinPolicy: 'open' }); community = await db.community.findUniqueOrThrow({ where: { id: created.body.id } }); }

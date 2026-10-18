@@ -1,3 +1,4 @@
+import { publishPhotoFixture, removePhotoFixtures } from './photo-fixtures.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -18,7 +19,7 @@ async function user(){const who={uid:'ask-recovery-'+randomUUID()};users.push(wh
 async function shot(page,name){assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:path.join(out,name+'.png'),fullPage:true});}
 try{
  const owner=await user(),neighbour=await user();const listingBody={mode:'donate',category:'clothing',title:'Cotton jackets',description:'Fixture clothing',condition:'good',quantity:3,areaLabel:'Jakarta Pusat',exactLocation:{lat:-6.1905,lng:106.8173},pickupInstructions:'Agree pickup privately',collection:{method:'owner_location',communityPointId:null}};
- const listing=await api(owner,'/listings','POST',listingBody),second=await api(owner,'/listings','POST',listingBody);
+ const listing=await publishPhotoFixture(base,owner,await api(owner,'/listings','POST',listingBody),'cotton-clothing'),second=await publishPhotoFixture(base,owner,await api(owner,'/listings','POST',listingBody),'cotton-clothing');
  const existing=await api(neighbour,'/requests','POST',{listingId:listing.id,quantity:1,message:'Could I collect a jacket?'});
  const session=await api(neighbour,'/ask/sessions','POST',{clientId:randomUUID()});
  const oldAction=await db.askAction.create({data:{sessionId:session.id,runId:randomUUID(),status:'cancelled',errorCode:'CONFLICT',summary:listing.title,payload:{kind:'request_item',body:{listingId:listing.id,quantity:1,message:''}},expiresAt:new Date(Date.now()+600000)}});
@@ -39,4 +40,4 @@ try{
  phase='conversation and read recovery';outage=false;failRead=true;await page.getByRole('button',{name:'Try again',exact:true}).first().click();await page.getByRole('heading',{name:'Cotton jackets',exact:true}).waitFor();await page.getByText('Could not mark messages as read.',{exact:false}).waitFor();await page.getByRole('button',{name:'Try again',exact:true}).click();await page.getByText('Could not mark messages as read.',{exact:false}).waitFor({state:'hidden'});await page.getByLabel('Your message',{exact:true}).fill('The connection is back.');await page.getByRole('button',{name:'Send message',exact:true}).click();await page.getByText('The connection is back.',{exact:true}).waitFor();await shot(page,'conversation-recovered-mobile');await page.setViewportSize({width:1440,height:900});await shot(page,'conversation-recovered-desktop');assert.equal(errors.length,0,errors.join('\n'));
  console.log('PASS historical JSON filtering, existing-request recovery, Free/Borrow labels, no empty-radius prompt, ambiguous yes clarification, 502 detail/read recovery and real message send; phone/desktop screenshots');
 }catch(error){console.error(`FAIL ${phase}: ${String(error.message).slice(0,500)}`);process.exitCode=1;}
-finally{await browser?.close();const ids=users.map(who=>who.id).filter(Boolean);await db.askSession.deleteMany({where:{userId:{in:ids}}});await db.donationRequest.deleteMany({where:{ownerId:{in:ids}}});await db.listing.deleteMany({where:{ownerId:{in:ids}}});await db.user.deleteMany({where:{id:{in:ids}}});for(const who of users)await auth.deleteUser(who.uid).catch(()=>undefined);await db.$disconnect();await deleteApp(app);}
+finally{await browser?.close();const ids=users.map(who=>who.id).filter(Boolean);await removePhotoFixtures(app,db,ids);await db.askSession.deleteMany({where:{userId:{in:ids}}});await db.donationRequest.deleteMany({where:{ownerId:{in:ids}}});await db.listing.deleteMany({where:{ownerId:{in:ids}}});await db.user.deleteMany({where:{id:{in:ids}}});for(const who of users)await auth.deleteUser(who.uid).catch(()=>undefined);await db.$disconnect();await deleteApp(app);}

@@ -20,6 +20,7 @@ export function PublishDraft({ draft, sessionId, initiallyOpen = false, onDismis
         const photo = await api(`/api/v1/ask/sessions/${sessionId}/attachments`, { method: 'POST', binaryBody: file, schema: AskAttachmentSchema, idempotencyKey: photoKey.current.forPayload({ name: file.name, size: file.size, modified: file.lastModified }) });
         attachmentIds.push(photo.id);
       }
+      if (!attachmentIds.length) throw new Error('Include at least one photo before preparing publication.');
       await api(`/api/v1/ask/sessions/${sessionId}/proposals`, { method: 'POST', body: { clientId: clientId.current, action: { operation: 'listing_publish', body, attachmentIds } }, schema: AskActionSchema });
       clientId.current = crypto.randomUUID();
       photoKey.current.clear();

@@ -1,3 +1,4 @@
+import { publishPhotoFixture } from './photo-fixtures.mjs';
 import assert from 'node:assert/strict';
 import { stubMapTiles } from './map-test-tiles.mjs';
 /* global document, innerWidth, window */
@@ -66,7 +67,7 @@ try {
   const photo = await sharp({ create: { width: 96, height: 96, channels: 3, background: 'red' } }).png().toBuffer();
   await donor.page.getByLabel('Title', { exact: false }).fill(title);
   await donor.page.getByPlaceholder('Tell neighbours more').fill('Synthetic test books for the complete donation flow.');
-  await donor.page.getByLabel('Item Photo', { exact: true }).setInputFiles({ name: 'synthetic-red-test.png', mimeType: 'image/png', buffer: photo });
+  await donor.page.getByLabel('Item photo (required)', { exact: true }).setInputFiles({ name: 'synthetic-red-test.png', mimeType: 'image/png', buffer: photo });
   await donor.page.getByRole('button', { name: 'Publish Listing', exact: true }).click();
   await donor.page.getByRole('link', { name: new RegExp(title) }).first().waitFor();
   const listing = (await api(owner, '/listings/mine')).items.find(item => item.title === title); assert(listing);
@@ -169,6 +170,7 @@ try {
 
   phase = 'mobile borrowing lifecycle';
   const lend = await api(owner, '/listings', 'POST', { mode: 'lend', category: 'household', title: 'Smoke lending tools', description: 'Disposable tools for the borrowing test', condition: 'good', quantity: 1, areaLabel: 'Smoke neighbourhood', exactLocation: { lat: -6.2, lng: 106.816 }, pickupInstructions: 'Message on arrival', collection: { method: 'owner_location', communityPointId: null }, lending: { maxLoanDays: 7, depositRequired: false, notes: null } });
+  await publishPhotoFixture(base,owner,lend,'tool-kit');
   await recipient.page.goto(new URL('/listings/' + lend.id, web).href);
   const day = offset => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
   await recipient.page.getByLabel('Borrow from').fill(day(0)); await recipient.page.getByLabel('Return by').fill(day(2));
@@ -177,7 +179,7 @@ try {
   const loanId = new URL(recipient.page.url()).searchParams.get('loan');
   for (const status of ['approved', 'checked_out', 'returned']) {
     await donor.page.goto(new URL('/activity?loan=' + loanId, web).href);
-    await donor.page.getByRole('button', { name: status.replaceAll('_', ' '), exact: true }).click();
+    await donor.page.getByRole('button', { name: ({approved:'Approve loan',checked_out:'Confirm collection',returned:'Confirm return'})[status], exact: true }).click();
     if (status === 'returned') await donor.page.getByLabel('Returned condition').fill('Returned clean and working');
     await donor.page.getByRole('button', { name: 'Confirm', exact: true }).click();
     await donor.page.locator('p').filter({ hasText: new RegExp('^' + status.replaceAll('_', ' ') + '$') }).first().waitFor();
@@ -220,6 +222,7 @@ try {
   await donor.page.getByRole('button', { name: 'Accept reviewed counts' }).click();
   await donor.page.getByRole('button', { name: 'Review and share confirmed stock' }).waitFor();
   await donor.page.getByRole('button', { name: 'Review and share confirmed stock' }).click();
+  await donor.page.getByLabel('Item photo (required)', {exact:true}).setInputFiles('apps/api/seed-assets/products/pantry-staples.jpg');
   await donor.page.getByRole('button', { name: 'Publish Listing', exact: true }).click();
   await donor.page.getByRole('link', { name: 'View / request this point item' }).waitFor();
   const inventory = (await api(owner, `/points/${point.id}/inventory`)).items[0]; assert.equal(inventory.available, 2); assert(inventory.listingId);

@@ -1,3 +1,5 @@
+import { ChatIcon, GiftIcon, ExchangeIcon, ListIcon, CalendarIcon } from '../../components/icons';
+import { ActivityItem, ActivityStatus } from './ActivityItem';
 import { MyListingsPanel } from '../listings/MyListingsPanel';
 import { LoansPanel } from '../loans/LoansPanel';
 import { type DonationRequest } from '@neighbourhood/shared';
@@ -15,15 +17,16 @@ export function ActivityPage() {
   const [params, setParams] = useSearchParams();
   const tab = params.has('request') ? 'requests' : params.has('loan') ? 'loans' : params.get('tab') === 'giving' ? 'giving' : params.get('tab') === 'loans' ? 'loans' : 'requests';
   const focused = useRequest(params.get('request'));
-  const list = useRequests(direction);
+  const list = useRequests(direction, tab === 'requests');
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
   return (
     <div className="space-y-4">
       <PageHeading title="Activity">Keep track of requests, handovers and the things you share.</PageHeading>
-      <div className="grid grid-cols-3 gap-1 rounded-xl bg-stone-100 p-1" role="group" aria-label="Activity view">{([['requests', 'Requests'], ['loans', 'Loans'], ['giving', 'Shared items']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={tab === value} className={`min-h-11 rounded-lg px-2 text-sm font-semibold ${tab === value ? 'bg-white text-brand-800' : 'text-stone-600'}`} onClick={() => setParams({ tab: value })}>{label}</button>)}</div>
+      <div className="grid grid-cols-3 gap-1 rounded-xl bg-stone-100 p-1" role="group" aria-label="Activity view">{([['requests', 'Requests', ListIcon], ['loans', 'Loans', ExchangeIcon], ['giving', 'Shared items', GiftIcon]] as const).map(([value, label, Icon]) => <button key={value} type="button" aria-pressed={tab === value} className={`flex min-h-16 flex-col items-center justify-center gap-1 rounded-lg px-1 text-sm font-semibold [&_svg]:h-5 [&_svg]:w-5 ${tab === value ? 'bg-white text-brand-800' : 'text-stone-600'}`} onClick={() => setParams({ tab: value })}><Icon />{label}</button>)}</div>
       {tab === 'giving' && <MyListingsPanel />}
       {tab === 'loans' && <LoansPanel />}
       {tab === 'requests' && <>
+      <div><h2 className="font-semibold">{direction === 'outgoing' ? 'Items you requested' : 'Requests for your items'}</h2><p className="mt-1 text-sm text-stone-600">{direction === 'outgoing' ? 'Follow approval and arrange collection for free items.' : 'Review your neighbours’ requests, then confirm the handover.'}</p></div>
       {focused.isLoading && <p role="status">{t('common.loading')}</p>}
       {focused.isError && <Alert tone="error">{featureError(focused.error)}</Alert>}
       {focused.data && <RequestCard key={`focused-${focused.data.id}`} item={focused.data} />}
@@ -51,14 +54,12 @@ function RequestCard({ item }: { item: DonationRequest }) {
   const allowed = item.allowedActions ?? [];
   return (
     <Card className="space-y-3">
-      <div className="flex items-start justify-between gap-3">
-        <h2 className="min-w-0 break-words font-semibold">{item.listingTitle ?? t('activity.item')}</h2>
-        <span className="shrink-0 rounded-full bg-brand-50 px-2 py-1 text-xs font-semibold text-brand-800">{t(`request.status.${item.status}`)}</span>
-      </div>
+      <ActivityItem id={item.listingId} title={item.listingTitle ?? t('activity.item')} photo={item.listingPhotoUrl} />
+      <ActivityStatus status={item.status} />
       <p className="text-sm text-stone-600">{t('needs.quantity', { value: item.quantity })}</p>
       {item.message && <p className="whitespace-pre-wrap break-words text-sm">{item.message}</p>}
-      {item.pickupBy && <p className="text-sm font-medium">{t('activity.pickupBy', { date: new Date(item.pickupBy).toLocaleString() })}</p>}
-      {item.conversationId && <Link className="inline-block min-h-11 py-3 text-sm font-semibold text-brand-800 underline" to={`/messages?conversation=${item.conversationId}`}>{t('activity.openChat')}</Link>}
+      {item.pickupBy && <p className="flex items-start gap-2 text-sm font-medium [&_svg]:h-5 [&_svg]:w-5"><CalendarIcon />{t('activity.pickupBy', { date: new Date(item.pickupBy).toLocaleString() })}</p>}
+      {item.conversationId && <Link className="inline-flex min-h-11 items-center gap-2 py-2 text-sm font-semibold text-brand-800 underline [&_svg]:h-5 [&_svg]:w-5" to={`/messages?conversation=${item.conversationId}`}><ChatIcon />{item.status === 'approved' ? 'Arrange collection' : 'Open conversation'}</Link>}
       <div className="flex flex-wrap gap-2">
         {allowed.map((to) => <Button key={to} variant="secondary" disabled={!online || transition.isPending} onClick={() => { setAction(to); transition.reset(); }}>{t(`request.action.${to}`)}</Button>)}
       </div>

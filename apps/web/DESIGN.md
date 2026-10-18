@@ -2,10 +2,10 @@
 name: NeighbourHood
 description: Simple, readable discovery and sharing for useful things nearby.
 colors:
-  brand-50: "#f0fdfa"
-  brand-100: "#ccfbf1"
-  brand-700: "#0f766e"
-  brand-800: "#115e59"
+  brand-50: "#f0fdf4"
+  brand-100: "#dcfce7"
+  brand-700: "#166534"
+  brand-800: "#14532d"
   page: "#fafaf9"
   ink: "#1c1917"
   white: "#ffffff"
@@ -144,26 +144,26 @@ components:
 
 **Creative North Star: "Useful things nearby"**
 
-NeighbourHood uses its incumbent teal identity, warm stone ground, white surfaces and system UI typography to make local inventory and the next action easy to read. This is the implemented visual system for the resident and volunteer web app, recorded after the approved enhancement. It preserves the existing identity rather than introducing a new art direction.
+NeighbourHood uses its incumbent green identity, warm stone ground, white surfaces and system UI typography to make local inventory and the next action easy to read. This is the implemented visual system for the resident and volunteer web app, recorded after the approved enhancement. It preserves the existing identity rather than introducing a new art direction.
 
 The interface is compact but gives controls and supporting copy room. Actual item photos provide visual detail; absent or broken photos receive an honest outline-icon fallback. Browsing expands on wider screens while forms and conversations retain a readable measure. The approved surface composition remains in `.impeccable/surfaces/src-app-tsx.md`; this document records reusable visual rules rather than prescribing Home's layout for every route.
 
 **Key Characteristics:**
 
-- Teal actions over a quiet stone and white field.
+- Green actions over a quiet stone and white field.
 - Clear system typography, sentence-case controls and descriptive supporting copy.
 - Restrained borders, rounded surfaces and consistent outline SVG icons.
 - Mobile discovery grids, readable conversations and explicit state changes.
 
 ## Colors
 
-The palette combines a dark teal action family with warm neutral surfaces; semantic colors explain state rather than add decoration. Frontmatter values preserve authored hex and the imported Tailwind OKLCH source without replacing either with approximate conversions.
+The palette combines a dark green action family with warm neutral surfaces; semantic colors explain state rather than add decoration. Frontmatter values preserve authored hex and the imported Tailwind OKLCH source without replacing either with approximate conversions.
 
 ### Primary
 
-- **Neighbourhood teal** (`brand-700`): primary buttons, Ask entry, unread badges, focus and card-hover borders.
-- **Deep teal** (`brand-800`): links, selected navigation, secondary button text and primary hover.
-- **Pale teal** (`brand-50`, `brand-100`): quiet hover/selection, Free labels, user conversation surfaces and owner initials.
+- **Neighbourhood green** (`brand-700`): primary buttons, Ask entry, unread badges, focus and card-hover borders.
+- **Deep green** (`brand-800`): links, selected navigation, secondary button text and primary hover.
+- **Pale green** (`brand-50`, `brand-100`): quiet hover/selection, Free labels, user conversation surfaces and owner initials.
 
 ### Secondary
 
@@ -181,7 +181,7 @@ The palette combines a dark teal action family with warm neutral surfaces; seman
 - **Stone edges** (`stone-200`, `stone-300`): quiet dividers/card borders, stronger input borders and disabled primary buttons.
 - **Stone text** (`stone-500` through `stone-900`): captions, support, field labels, strong text and the offline strip. Meaningful support generally uses `stone-600`; existing smaller helper exceptions are not a new baseline.
 
-**The Action Teal Rule.** Use the existing teal family for actions, focus and selected states; retain words alongside semantic status colors.
+**The Action Green Rule.** Use the existing green family for actions, focus and selected states; retain words alongside semantic status colors.
 
 ## Typography
 
@@ -219,11 +219,11 @@ Ask and selected neighbour conversations use a flex shell sized to the visual vi
 
 ## Elevation & Depth
 
-The shared system is flat: white and stone tonal layers, quiet borders and dividers establish depth. Buttons, cards and selected modes stay flat. The requested raised Ask entry is the deliberate exception, with a soft shadow separating its circle from the navigation. Input focus adds a two-pixel translucent teal ring; alerts and incoming message bubbles use thin rings. The native modal uses a black 40% backdrop.
+The shared system is flat: white and stone tonal layers, quiet borders and dividers establish depth. Buttons, cards and selected modes stay flat. The requested raised Ask entry is the deliberate exception, with a soft shadow separating its circle from the navigation. Input focus adds a two-pixel translucent green ring; alerts and incoming message bubbles use thin rings. The native modal uses a black 40% backdrop.
 
 ### Shadow Vocabulary
 
-- **Field focus ring** (`0 0 0 2px color-mix(in oklab, #0f766e 20%, transparent)`): the shared input focus treatment, paired with a teal border.
+- **Field focus ring** (`0 0 0 2px color-mix(in oklab, #166534 20%, transparent)`): the shared input focus treatment, paired with a green border.
 - **Status edge** (`0 0 0 1px <semantic-200>`): the shared alert's corresponding semantic ring.
 
 **The Quiet Surface Rule.** Separate ordinary surfaces with tone and thin edges; preserve the existing flat card and button treatment.
@@ -240,33 +240,33 @@ Reusable navigation and utility icons are inline 24px outline SVGs with a 1.8px 
 
 ### Buttons
 
-Direct, compact controls with comfortable shared touch targets. The canonical button has a 44px minimum height, semibold label and `xl` corners. Primary is teal/white and deepens on hover; its disabled state is stone. Secondary is white with a stone border, deep-teal text and a pale-teal hover with teal border. Ghost retains teal text and a pale hover. Disabled controls use a not-allowed cursor; secondary disabled text turns stone. Global focus-visible outlines are teal, with a three-pixel offset; the shared button explicitly uses a two-pixel offset. There is no bespoke pressed translation or raised shadow.
+Direct, compact controls with comfortable shared touch targets. The canonical button has a 44px minimum height, semibold label and `xl` corners. Primary is green/white and deepens on hover; its disabled state is stone. Secondary is white with a stone border, deep-green text and a pale-green hover with green border. Ghost retains green text and a pale hover. Disabled controls use a not-allowed cursor; secondary disabled text turns stone. Global focus-visible outlines are green, with a three-pixel offset; the shared button explicitly uses a two-pixel offset. There is no bespoke pressed translation or raised shadow.
 
 ### Chips
 
-Offering labels say **Free to keep** or **Borrow & return**, so color never bears the meaning alone. Compact cards use the frontmatter chip padding and caption type; detail pages use larger support-size labels with 0.25rem by 0.75rem padding. Mode and activity controls are segmented groups: three equal buttons on stone, a white selected segment and deep-teal selected text, exposed through `aria-pressed`. Each shared mode segment has a 44px minimum height.
+Offering labels say **Free to keep** or **Borrow & return**, so color never bears the meaning alone. Compact cards use the frontmatter chip padding and caption type; detail pages use larger support-size labels with 0.25rem by 0.75rem padding. Mode and activity controls are segmented groups: three equal buttons on stone, a white selected segment and deep-green selected text, exposed through `aria-pressed`. Each shared mode segment has a 44px minimum height.
 
-Utility actions use the shared `ActionPill` or equivalent link class: a fully rounded white control, stone edge, deep-teal label, 44px minimum height and 18px outline icon. History, Saved needs, New chat and Home utilities keep visible words beside their icons. Status labels remain static; action pills remain buttons or links.
+Utility actions use the shared `ActionPill` or equivalent link class: a fully rounded white control, stone edge, deep-green label, 44px minimum height and 18px outline icon. History, Saved needs, New chat and Home utilities keep visible words beside their icons. Status labels remain static; action pills remain buttons or links.
 
 Home places Community points and Saved needs above the Nearby items heading. Below that heading, All / Free / Borrow remain segmented offering controls; the category filter sits beneath them as a native select styled as a pill, with the box icon and selected category. Selecting All categories clears the filter. View all carries category and offering into Explore. Category administration remains accessible from Profile.
 
 ### Cards / Containers
 
-General cards are white with a stone edge, `2xl` corners and the card padding token. Listing cards clip their media and use 0.75rem detail padding; the whole card links to item details and its border turns teal on hover. Title and public area/distance wrap. Images load lazily; missing and broken photos show the outline box and **No photo yet** rather than synthetic product imagery. Nested general cards flatten through the global surface rule.
+General cards are white with a stone edge, `2xl` corners and the card padding token. Listing cards clip their media and use 0.75rem detail padding; the whole card links to item details and its border turns green on hover. Title and public area/distance wrap. Images load lazily; missing and broken photos show the outline box and **No photo yet** rather than synthetic product imagery. Nested general cards flatten through the global surface rule.
 
 ### Inputs / Fields
 
-The shared field has a visible associated label, optional described hint, white ground, stone border, `xl` corners and 44px minimum height. Text content uses the body role. Focus changes the border to teal and adds the translucent ring. Labels are support-size medium weight. Errors are usually shared alerts adjacent to the form; a field-level invalid color token is not implemented. Existing bespoke select/textarea fact controls have source-specific sizing and focus behavior; the shared field specification does not claim they are all identical.
+The shared field has a visible associated label, optional described hint, white ground, stone border, `xl` corners and 44px minimum height. Text content uses the body role. Focus changes the border to green and adds the translucent ring. Labels are support-size medium weight. Errors are usually shared alerts adjacent to the form; a field-level invalid color token is not implemented. Existing bespoke select/textarea fact controls have source-specific sizing and focus behavior; the shared field specification does not claim they are all identical.
 
 ### Navigation
 
-Five labeled outline-icon tabs retain their order: Home, Explore, Ask, Activity, Profile. Active text/icons are deep teal; inactive content is stone and turns teal on hover. The white navigation is separated by a top border. Header Messages and Updates utilities expose accessible names containing actual global unread counts; badges appear only for positive counts and cap visual text at **99+**. Read operations refresh those counts. The local-demo pill is environment-specific and hidden below 360px.
+Five labeled outline-icon tabs retain their order: Home, Explore, Ask, Activity, Profile. Active text/icons are deep green; inactive content is stone and turns green on hover. The white navigation is separated by a top border. Header Messages and Updates utilities expose accessible names containing actual global unread counts; badges appear only for positive counts and cap visual text at **99+**. Read operations refresh those counts. The local-demo pill is environment-specific and hidden below 360px.
 
-Ask uses a 48px teal circle raised 16px above the tab row, with its label below and a soft shadow. It remains a normal link to the Ask route. This gives the agent a clear focal point without introducing another conversation modal.
+Ask uses a 48px green circle raised 16px above the tab row, with its label below and a soft shadow. It remains a normal link to the Ask route. This gives the agent a clear focal point without introducing another conversation modal.
 
 ### Conversation composer and dialog
 
-Ask starts with a usable composer, one invitation and three starters; opening it does not create a blank server session. The white composer has a stone border that turns teal on focus within. Its textarea is visually integrated, with its own border and outline removed inside the composer. User Ask messages use pale teal; neighbour messages sent by the resident use solid teal, while incoming messages use white with a stone ring. Message text preserves line breaks.
+Ask starts with a usable composer, one invitation and three starters; opening it does not create a blank server session. The white composer has a stone border that turns green on focus within. Its textarea is visually integrated, with its own border and outline removed inside the composer. User Ask messages use pale green; neighbour messages sent by the resident use solid green, while incoming messages use white with a stone ring. Message text preserves line breaks.
 
 The composer places a 44px round attachment `+` before the two-row textarea and a named round Send icon after it. The attachment control opens a native auto popover with Take photo and Photo library, plus file limits and an explicit close control. Escape and outside dismissal preserve native behavior. Session deletion is a named trash icon with confirmation. At short heights, the history region scrolls while the composer and navigation retain their own space.
 
@@ -282,17 +282,17 @@ Home and Explore show item-shaped skeletons while the profile or enabled item qu
 
 ### Search area map
 
-Explore opens the map directly below its title using the resident's saved search point. The white, stone-edged section retains `2xl` corners, a labelled Show/Hide map action and a Map & location disclosure. The lazy map reserves 256px on phones and 288px on wider screens. A teal circle shows the selected kilometre radius; a small teal dot with a white edge marks the resident's saved point. Public product areas use 36×44px teal teardrop pins with a white count centre, grouping listings with the same rounded coordinates. Keyboard-accessible popups link to products and explain that the area is approximate, not the pickup address. Popup content scrolls within 180px. Fit radius restores the extent; Change location opens Profile. Attribution stays visible, and tile failure keeps the search usable with a Retry map action. Automated screenshot tiles are labelled synthetic and are not evidence of provider availability.
+Explore opens the map directly below its title using the resident's saved search point. The white, stone-edged section retains `2xl` corners, a labelled Show/Hide map action and a Map & location disclosure. The lazy map reserves 256px on phones and 288px on wider screens. A green circle shows the selected kilometre radius; a small green dot with a white edge marks the resident's saved point. Public product areas use 36×44px green teardrop pins with a white count centre, grouping listings with the same rounded coordinates. Keyboard-accessible popups link to products and explain that the area is approximate, not the pickup address. Popup content scrolls within 180px. Fit radius restores the extent; Change location opens Profile. Attribution stays visible, and tile failure keeps the search usable with a Retry map action. Automated screenshot tiles are labelled synthetic and are not evidence of provider availability.
 
 The Search distance disclosure sits directly below the map, before Find an item. Its labelled numeric field accepts whole kilometres from 1 to 50, with an Apply radius action and validation. Profile retains presets and adds the same manual range. Ask results state the searched radius, separate farther matches and offer labelled radius reply pills that draft editable chat messages. Widening a chat search does not change the saved Profile preference.
 
-Seeded products may use the repository's generated household photos as authorized test content. Unmatched products and missing uploads keep the existing honest no-photo fallback. Real resident listings use their own uploaded photos.
+Seeded products may use the repository's generated household photos as authorized test content. Seed scenarios use photographed products. Legacy records without readable photos can be removed with the backed-up local cleanup command; transient load failures retain an honest unavailable-image state. Real resident listings use their own uploaded photos.
 
 ## Do's and Don'ts
 
 ### Do:
 
-- **Do** reuse the existing teal, stone, white and system sans vocabulary.
+- **Do** reuse the existing green, stone, white and system sans vocabulary.
 - **Do** keep meaningful supporting copy readable and use words alongside colored states.
 - **Do** match pending skeleton geometry to its eventual content and give empty results a concrete next step.
 - **Do** retain public area and distance together, while keeping exact pickup information behind its authorized flow.
@@ -301,7 +301,7 @@ Seeded products may use the repository's generated household photos as authorize
 
 ### Don't:
 
-- **Don't** introduce a new visual identity, display family or decorative elevation for ordinary product screens.
+- **Don't** replace the approved peer-supplied visual identity, display family or decorative elevation for ordinary product screens.
 - **Don't** turn nested content into repeated bordered cards; preserve the implemented flattening rule.
 - **Don't** imply that Borrow is date-available, that a public area is verified, or that an unconfirmed action has completed.
 - **Don't** use synthetic item imagery or invented counts as evidence of live inventory or unread activity.
@@ -313,7 +313,7 @@ Not canonized: isolated 10–11px badge/helper text, legacy uppercase planned-mo
 Ask asks one casual question at a time through normal chat; reply pills send
 the chosen answer directly. Setup actions open actual photo or location controls.
 The composer clears on Send and preserves a next draft during streaming.
-Sharing requests a photo early, with an explicit option to continue without one.
+Sharing requests a photo first. Every published item requires a photo; unfinished items remain private drafts.
 Profile location setup preserves existing coordinates when only the public area
 label is missing and resumes the chat after saving. Draft/review forms do not compete with a clarification in the
 same turn. Older product results collapse and can be reopened, retaining photos
@@ -332,6 +332,27 @@ check offers no distance reply pills. Same-title products use visible ordinals
 to support a conversational choice. Duplicate-request recovery uses the existing
 information alert and a direct activity link; it does not offer another Confirm.
 Conversation loading failures retain readable messages and offer retry. Keep
-the existing borders, typography, teal actions and dock. The 2026-10-18 browser
+the existing borders, typography, green actions and dock. The 2026-10-18 browser
 pass inspected phone/desktop recovery states together; functional evidence and
 the real-model quota limit are recorded in docs/ask-recovery.md.
+
+## Approved brand and Activity refinement — 2026-10-18
+
+Use the supplied horizontal colour SVG in the header and supplied PWA symbols
+for favicons, Apple touch icons and install icons. Source assets live in
+`1_online/NeighbourHood-logo/NeighbourHood-logo` in the workspace; runtime copies
+are committed under public/brand and public/icons. Green #22c55e is the logo's
+bright mark; #166534 is the primary action colour for white-text contrast,
+#14532d is the strong foreground and #24332b is the brand charcoal. Blue #38bdf8
+is the supplied connector accent; sky information states distinguish collection
+and active loans, amber denotes waiting/expiry, and all statuses include words
+and a small authored SVG. Existing white/stone surfaces and system type stay.
+
+Activity tabs pair icons with Requests, Loans and Shared items. Product photos
+lead each record; badges name Awaiting approval, Ready to collect, On loan,
+Returned and other real states. Dates use readable local formatting. Actions
+use verbs such as Approve loan, Confirm collection and Cancel loan, and retain
+explicit confirmation. Request polling pauses outside its tab. Profile starts
+with identity, described navigation rows and a private search-area summary.
+Choose location opens the real authenticated form; Edit profile & preferences
+is a native disclosure. Existing account, location and sign-out behavior remains.

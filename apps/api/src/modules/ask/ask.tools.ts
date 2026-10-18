@@ -33,7 +33,7 @@ const paging = z.strictObject({ cursor: z.string().max(500).optional() });
 export class AskTools {
   private readonly tools = new Map<string, RegisteredTool>();
   constructor(private readonly db: Db, private readonly services: AskServices) {
-    this.add('request_input', 'Open a real photo chooser, Profile location form or secure listing pickup review. Use instead of text choices such as Set location in Profile or Add photo. Ends the turn and waits for the user. Coordinates/private addresses are entered in secure UI, never chat. For sharing without a photo, request photo first; if declined, continue without repeating.', z.strictObject({ input: AskInputSchema, prompt: z.string().trim().min(1).max(300) }), async ({ input, prompt }, ctx) => {
+    this.add('request_input', 'Open a real photo chooser, Profile location form or secure listing pickup review. Use instead of text choices such as Set location in Profile or Add photo. Ends the turn and waits for the user. Coordinates/private addresses are entered in secure UI, never chat. For sharing without a photo, request photo first; a photo is mandatory before publication.', z.strictObject({ input: AskInputSchema, prompt: z.string().trim().min(1).max(300) }), async ({ input, prompt }, ctx) => {
       if (input === 'photo' && await db.askAttachment.count({ where: { sessionId: ctx.sessionId } })) return { result: { photoAlreadyProvided: true, note: 'A photo is already available. Continue with missing facts, do not ask again.' }, parts: [] };
       return { result: { waitingForUser: true, committed: false, input }, parts: [{ kind: 'input_request', input, prompt }] };
     });
@@ -146,7 +146,19 @@ export class AskTools {
       const row = await db.askDraft.upsert({ where: { sessionId_kind: { sessionId: ctx.sessionId, kind: 'listing' } }, create: { sessionId: ctx.sessionId, kind: 'listing', data }, update: { data } });
       const attachments = await db.askAttachment.findMany({ where: { sessionId: ctx.sessionId, id: { in: data.attachmentIds } } });
       const draft = AskListingDraftSchema.parse({ ...row, attachments, updatedAt: row.updatedAt.toISOString() });
-      return { result: { draft, publicationAvailable: Boolean(services.marketplace), ...(data.quantity === null ? { note: 'Quantity has not been stated by the user. Ask how many items; a photo cannot confirm quantity.' } : {}) }, parts: [{ kind: 'listing_draft', draft }] };
+      // Persist every confirmed fact before handing control back. Incomplete drafts
+      // must not strand the resident at a review card with unanswered fields.
+      const missing: AskPart | undefined = !attachments.length
+        ? { kind: 'input_request', input: 'photo', prompt: 'Please add a clear photo of the item. A photo is required to publish.' }
+        : !data.mode ? { kind: 'questions', questions: [{ question: 'Would you like to give this away or lend it out?', options: ['Give it away', 'Lend it out'] }] }
+        : !data.condition ? { kind: 'questions', questions: [{ question: 'What condition is it in?', options: ['New', 'Like new', 'Good', 'Fair', 'Needs repair'] }] }
+        : data.quantity === null ? { kind: 'questions', questions: [{ question: 'How many items are you sharing?', options: ['1', '2', '3'] }] }
+        : data.mode === 'lend' && !data.maxLoanDays ? { kind: 'questions', questions: [{ question: 'For how many days can a neighbour borrow it?', options: ['3 days', '7 days', '14 days'] }] }
+        : !data.title ? { kind: 'questions', questions: [{ question: 'What would you like to call this item?', options: [] }] }
+        : !data.category ? { kind: 'questions', questions: [{ question: 'Which category fits this item best?', options: ['Groceries', 'Clothing', 'Books', 'Household', 'Appliances', 'Mobility aids'] }] }
+        : data.description === null ? { kind: 'questions', questions: [{ question: 'Is there anything else a neighbour should know about it?', options: ['No extra description'] }] }
+        : undefined;
+      return { result: { draft, publicationAvailable: Boolean(services.marketplace), waitingForUser: Boolean(missing) }, parts: missing ? [missing] : [{ kind: 'listing_draft', draft }] };
     });
     if (services.marketplace) this.add('prepare_publish_listing', 'Prepare publication of the current complete private draft using the caller’s saved Profile pickup location. Ask user to choose saved location first. Requires confirmed condition, quantity, offering and maximum loan days for lending. Preserves draft photos. Creates a confirmation card only, never publishes until user presses Confirm. Custom pickup details use the secure draft form.', z.strictObject({ useSavedLocation: z.literal(true) }), async (_args, ctx) => {
       const row = await db.askDraft.findUnique({ where: { sessionId_kind: { sessionId: ctx.sessionId, kind: 'listing' } } });
@@ -155,6 +167,7 @@ export class AskTools {
       const history = await db.askMessage.findMany({ where: { sessionId: ctx.sessionId }, orderBy: { sequence: 'asc' }, select: { role: true, text: true } });
       if (draft.quantity === null || !quantityWasStated(history, draft.quantity)) return { result: { waitingForUser: true, missingFact: 'quantity', committed: false }, parts: [{ kind: 'questions', questions: [{ question: 'How many items are you sharing?', options: ['1', '2', '3'] }] }] };
       if (!Object.hasOwn(row.data as object, 'attachmentIds')) draft.attachmentIds = (await db.askMessage.findFirst({ where: { sessionId: ctx.sessionId, role: 'user', attachmentIds: { isEmpty: false }, createdAt: { lte: row.updatedAt } }, orderBy: { sequence: 'desc' } }))?.attachmentIds.slice(0, 2) ?? [];
+      if (!draft.attachmentIds.length) return { result: { waitingForUser: true, requiredInput: 'photo', committed: false }, parts: [{ kind: 'input_request', input: 'photo', prompt: 'Please add a photo of the item before publishing.' }] };
       if (!draft.title || !draft.category || !draft.mode || !draft.condition || !draft.quantity || draft.description === null || (draft.mode === 'lend' && !draft.maxLoanDays)) throw new HttpError('VALIDATION_FAILED', 'Ask for missing listing facts before preparing publication');
       const user = await db.user.findUniqueOrThrow({ where: { id: ctx.userId } });
       if (user.homeLat === null || user.homeLng === null || !user.areaLabel?.trim()) return { result: { waitingForUser: true, requiredInput: 'profile_location', coordinatesSet: user.homeLat !== null && user.homeLng !== null, publicAreaSet: Boolean(user.areaLabel?.trim()), note: 'Use the real location form. A missing public area is not missing coordinates.' }, parts: [{ kind: 'input_request', input: 'profile_location', prompt: user.homeLat !== null && user.homeLng !== null ? 'Your location is set. Add a public neighbourhood or city label to continue.' : 'Choose your pickup location and public area to continue.' }] };

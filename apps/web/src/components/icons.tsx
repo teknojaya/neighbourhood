@@ -31,3 +31,9 @@ export const TrashIcon = () => <svg {...base}><path d="M3 6h18M9 6V3h6v3M5 6l1 1
 export const MapIcon = () => <svg {...base}><path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2ZM9 3v16M15 5v16" /></svg>;
 export const ChevronDownIcon = () => <svg {...base}><path d="m6 9 6 6 6-6" /></svg>;
 export const ChevronLeftIcon = () => <svg {...base}><path d="m15 6-6 6 6 6" /></svg>;
+export const CheckIcon = () => <svg {...base}><path d="m5 12 4 4L19 6" /></svg>;
+export const ClockIcon = () => <svg {...base}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>;
+export const ExchangeIcon = () => <svg {...base}><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4" /></svg>;
+export const GiftIcon = () => <svg {...base}><path d="M4 10h16v11H4ZM3 6h18v4H3ZM12 6v15" /><path d="M12 6H8a2.5 2.5 0 1 1 2.4-3.2L12 6Zm0 0h4a2.5 2.5 0 1 0-2.4-3.2L12 6Z" /></svg>;
+export const CalendarIcon = () => <svg {...base}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M7 3v4M17 3v4M3 11h18" /></svg>;
+export const ChevronRightIcon = () => <svg {...base}><path d="m9 6 6 6-6 6" /></svg>;

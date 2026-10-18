@@ -22,7 +22,8 @@
     "test:db": "prisma generate && vitest run --config vitest.db.config.ts",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "db:status": "prisma migrate status"
+    "db:status": "prisma migrate status",
+    "cleanup:photos": "tsx --env-file-if-exists=.env scripts/prune-photo-less-listings.ts"
   },
   "dependencies": {
     "@google/genai": "2.30.0",

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { AI_LIMITS } from '@neighbourhood/shared';
 import { useAuth } from '../../auth/AuthProvider';
 import { getShareDraft, removeShareDraft, saveShareDraft } from './shareDraftStore';
@@ -15,7 +16,7 @@ import { Alert, Button, FormSurface, TextField } from '../../components/ui';
 import { CloseIcon } from '../../components/icons';
 import { ApiError } from '../../lib/api';
 import { createRetryKey } from '../activity/retry-key';
-import { createListing, updateListing, uploadListingPhoto } from './listingApi';
+import { createListing, transitionListing, updateListing, uploadListingPhoto } from './listingApi';
 import { ProfileLocationDialog } from '../profile/ProfileLocationDialog';
 
 interface ListingFormModalProps {
@@ -68,6 +69,7 @@ export function ListingFormModal({
   const me = useMe();
   const [locationSetup, setLocationSetup] = useState(false);
   const defaultArea = me.data?.profile?.areaLabel ?? '';
+  const queryClient = useQueryClient();
   const defaultLocation = me.data?.profile?.homeLocation;
   const keys = useRef(restored?.retryKeys ?? createRetryKey());
   const photoKey = useRef(restored?.photoKey ?? crypto.randomUUID());
@@ -137,6 +139,10 @@ export function ListingFormModal({
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    if (!photoFile && !existingListing?.photos.length && !onPrepare) {
+      setErrorMessage('Add a clear photo of the item before publishing.');
+      return;
+    }
 
     if (title.trim().length < 3) {
       setErrorMessage('Title must be at least 3 characters long.');
@@ -218,8 +224,10 @@ export function ListingFormModal({
         if (photoFile) {
           await uploadListingPhoto(created.id, photoFile, photoKey.current);
         }
+        await transitionListing(created.id, 'active', `${photoKey.current}_publish`);
       }
 
+      await Promise.all(['my-listings', 'home-items', 'explore', 'listing-detail'].map(key => queryClient.invalidateQueries({ queryKey: [key] })));
       clearDraft(); onSuccess();
     } catch (err) {
 
@@ -440,7 +448,7 @@ id="listing-field-6"               rows={2}
           {/* Photo Upload Picker */}
           {attachedPhotos}
           <div>
-            <label className="block text-sm font-medium text-stone-800" htmlFor="listing-field-7">Item Photo</label>
+            <label className="block text-sm font-medium text-stone-800" htmlFor="listing-field-7">Item photo (required)</label>
 <input
 id="listing-field-7"               type="file"
               accept="image/png, image/jpeg, image/webp"

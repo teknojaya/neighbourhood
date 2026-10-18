@@ -18,6 +18,7 @@ export const DonationRequestSchema = z.object({
   updatedAt: IsoDateTimeSchema,
   /** Optional additions for activity cards; actions are resolved by the server. */
   listingTitle: z.string().max(100).optional(),
+  listingPhotoUrl: z.string().optional(),
   allowedActions: z.array(DonationRequestStatusSchema.exclude(['pending', 'expired'])).optional(),
 });
 export type DonationRequest = z.infer<typeof DonationRequestSchema>;
@@ -40,6 +41,7 @@ export const DonationRequestTransitionBodySchema = z.strictObject({
 // ------------------------------------------------------------------- Loans
 export const LoanSchema = z.object({
   listingTitle: z.string().max(100).optional(),
+  listingPhotoUrl: z.string().optional(),
   allowedActions: z.array(LoanStatusSchema.exclude(['pending'])).optional(),
   id: IdSchema,
   listingId: IdSchema,

@@ -63,7 +63,7 @@ actions or neighbours' eligibility. Direct browsing and forms remain available.
   confirmation/cancellation/recovery and streamed progress. Saved needs are
   independent of chat deletion.
 - Assistant replies stream live. New tasks ask one to four focused questions
-  for missing facts, with choices and editable answers. Complete follow-ups
+  for missing facts, with one question at a time and choices that send immediately. Complete follow-ups
   avoid repeated questions. Photos preview before first send, stay attached to
   their draft, and appear on publication review. Ask can prepare publication
   using the saved Profile pickup area; the resident explicitly confirms it.
@@ -77,7 +77,7 @@ actions or neighbours' eligibility. Direct browsing and forms remain available.
 - Exact pickup details require authorization and stay out of model context.
   Community point addresses become public only with partner consent. QR codes
   identify points and do not grant permissions.
-- Photos use a private bucket with API-controlled reads, normalization and
+- Every published listing requires at least one uploaded photo. Unfinished listings remain private drafts. Photos use a private bucket with API-controlled reads, normalization and
   cleanup. User images are never evidence of condition, quantity or dimensions
   unless a person confirms those facts.
 - Mutations require connectivity; the PWA does not silently queue marketplace
@@ -95,7 +95,7 @@ actions or neighbours' eligibility. Direct browsing and forms remain available.
 
 The name is NeighbourHood. The user requested a simple, modern, clear and
 readable interface. Existing logo/icon assets and the live interface are design
-evidence; a new visual identity has not been approved. Aesthetic decisions
+evidence; the owner approved the new peer-supplied green/blue homes-and-connections identity on 2026-10-18. Aesthetic decisions
 belong in the subsequent design brief, not this product record.
 
 ## Evidence on Hand

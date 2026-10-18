@@ -67,6 +67,19 @@ afterAll(async () => {
 });
 
 describe('Ask sessions, agent tools and confirmed actions against PostgreSQL', () => {
+  it('keeps the current draft in context after its original facts fall outside the chat window', async () => {
+    const f = await fixture();
+    await db.askDraft.create({ data: { sessionId: f.session.id, kind: 'listing', data: { title: 'Cotton jackets', category: 'clothing', mode: 'donate', condition: 'like_new', quantity: 2, description: 'Two jackets to give away.', attachmentIds: [] } } });
+    await db.askMessage.createMany({ data: Array.from({ length: 40 }, (_, sequence) => ({ sessionId: f.session.id, sequence, role: sequence % 2 ? 'assistant' as const : 'user' as const, text: sequence === 0 ? 'I have two jackets in like new condition.' : sequence % 2 ? 'What else would you like to change?' : 'Keep the current details.' })) });
+    await db.askSession.update({ where: { id: f.session.id }, data: { nextSequence: 40 } });
+    await f.ask.send(f.user.id, f.session.id, send('Please review my donation.'));
+    const text = f.model.calls[0]!.flatMap(message => message.parts?.map(part => part.text ?? '') ?? []).join('\n');
+    expect(text).not.toContain('I have two jackets in like new condition.');
+    expect(text).toContain('Current private listing draft');
+    expect(text).toContain('"quantity":2');
+    expect(text).toContain('"condition":"like_new"');
+    expect(text).not.toMatch(/homeLat|homeLng|pickupInstructions/);
+  });
   it('filters leaked card JSON in streams/history and keeps application data out of assistant prose', async () => {
     const dirty = 'Please review the card.\nServer cards: [{"kind":"marketplace_confirmation","attachmentIds":["private"]}]';
     const model = Object.assign(new FakeModel(), { generate: async (_contents: Content[], _tools: unknown, _signal: AbortSignal, onText?: (text: string) => Promise<void>) => { await onText?.(dirty); return {role:'model',parts:[{text:dirty}]} as Content; } });

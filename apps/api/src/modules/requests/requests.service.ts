@@ -10,6 +10,7 @@ import { beforeCursor, decodeCursor, pageRows, type PageOptions } from '../../li
 import { ConversationsStore } from '../conversations/conversations.store.js';
 import { DonationRequestsStore } from './requests.store.js';
 import { runIdempotent, type MutationResult } from './idempotency.js';
+import type { ObjectStorage } from '../../lib/storage.js';
 
 type CreateBody = z.infer<typeof CreateDonationRequestBodySchema>;
 type TransitionBody = z.infer<typeof DonationRequestTransitionBodySchema>;
@@ -23,14 +24,14 @@ export interface RequestsService {
 
 const include = {
   conversation: { select: { id: true } },
-  listing: { select: { title: true, communityPoint: { select: { communityId: true } } } },
+  listing: { select: { title: true, photos: { orderBy: { position: 'asc' }, take: 1 }, communityPoint: { select: { communityId: true } } } },
 } satisfies Prisma.DonationRequestInclude;
 type RequestRow = Prisma.DonationRequestGetPayload<{ include: typeof include }>;
 
 export class PrismaRequestsService implements RequestsService {
   private readonly store: DonationRequestsStore;
   private readonly conversations: ConversationsStore;
-  constructor(private readonly db: Db) {
+  constructor(private readonly db: Db, private readonly photos?: ObjectStorage) {
     this.store = new DonationRequestsStore(db);
     this.conversations = new ConversationsStore(db);
   }
@@ -89,7 +90,7 @@ export class PrismaRequestsService implements RequestsService {
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: opts.limit + 1,
     });
     const page = pageRows(rows, opts.limit);
-    return { ...page, items: page.items.map((row) => this.dto(row, userId, communityIds)) };
+    return { ...page, items: await Promise.all(page.items.map((row) => this.dto(row, userId, communityIds))) };
   }
 
   private async volunteerCommunities(db: Db | Tx, userId: string) {
@@ -112,10 +113,11 @@ export class PrismaRequestsService implements RequestsService {
     return communityId && communityIds.includes(communityId) ? 'volunteer' : null;
   }
 
-  private dto(row: RequestRow, userId: string, communityIds: string[]) {
+  private async dto(row: RequestRow, userId: string, communityIds: string[]) {
     const actor = this.actor(row, userId, communityIds);
     return DonationRequestSchema.parse({
       id: row.id, listingId: row.listingId, listingTitle: row.listing.title,
+      listingPhotoUrl: row.listing.photos[0] && this.photos ? await this.photos.signedReadUrl(row.listing.photos[0].storagePath) : undefined,
       ownerId: row.ownerId, requesterId: row.requesterId, quantity: row.quantity, message: row.message,
       status: row.status, pickupBy: row.pickupBy?.toISOString() ?? null,
       conversationId: actor === 'volunteer' ? null : row.conversation?.id ?? null,

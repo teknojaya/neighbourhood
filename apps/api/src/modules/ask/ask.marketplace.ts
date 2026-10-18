@@ -43,6 +43,7 @@ export const publicToolResult = (result: unknown, parts: AskPart[]) => ({ result
 export async function authorizeProposal(db: Db, market: MarketplaceServices, userId: string, action: MarketplaceAction): Promise<MarketplaceAction> {
   const access = new PrismaAccessRepository(db);
   switch (action.operation) {
+    case 'listing_publish': if (!action.attachmentIds.length) throw new HttpError('VALIDATION_FAILED', 'Add at least one photo before publishing'); break;
     case 'saved_item_add': await market.listings.getListingDetail(userId, action.listingId); break;
     case 'saved_item_remove': if (!await db.savedListing.count({ where: { userId, listingId: action.listingId } })) throw new HttpError('NOT_FOUND', 'Saved item not found'); break;
     case 'listing_edit': case 'listing_transition': { const { listing } = await market.listings.getListingDetail(userId, action.listingId); if (listing.ownerId !== userId) throw new HttpError('FORBIDDEN', 'Only the owner can manage this item'); return { ...action, expectedUpdatedAt: listing.updatedAt }; }

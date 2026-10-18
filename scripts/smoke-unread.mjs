@@ -1,3 +1,4 @@
+import { publishPhotoFixture, removePhotoFixtures } from './photo-fixtures.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -31,6 +32,7 @@ async function user(name) {
 try {
   const owner = await user('Synthetic UI Owner'), neighbour = await user('Synthetic UI Neighbour');
   const listing = await api(owner, '/listings', 'POST', {mode:'donate',category:'books',title:'Synthetic unread test books',description:'Disposable test fixture',condition:'good',quantity:1,areaLabel:'Synthetic UI test area',exactLocation:{lat:-6.2,lng:106.816},pickupInstructions:'Synthetic private test note',collection:{method:'owner_location',communityPointId:null}});
+  await publishPhotoFixture(base,owner,listing);
   const request = await api(neighbour, '/requests', 'POST', {listingId:listing.id,quantity:1,message:'Synthetic initial unread request'});
   await db.notification.createMany({data:Array.from({length:25},()=>({userId:owner.id,type:'message_received',title:'Synthetic test update',body:'Disposable unread update'}))});
   assert.deepEqual(await api(owner,'/notifications/unread'),{messages:1,updates:26});
@@ -62,6 +64,6 @@ try {
 } catch(error) { console.error(`FAIL ${phase}: ${error instanceof assert.AssertionError ? error.message : error.name}`); process.exitCode=1; }
 finally {
  await browser?.close();const ids=users.map(u=>u.id).filter(Boolean);
- try {await db.donationRequest.deleteMany({where:{ownerId:{in:ids}}});await db.listing.deleteMany({where:{ownerId:{in:ids}}});await db.user.deleteMany({where:{id:{in:ids}}});for(const u of users)await auth.deleteUser(u.uid);console.log('Removed disposable unread fixtures');}catch{console.error('Unread fixture cleanup needs attention');process.exitCode=1;}
+ try {await removePhotoFixtures(app,db,ids); await db.donationRequest.deleteMany({where:{ownerId:{in:ids}}});await db.listing.deleteMany({where:{ownerId:{in:ids}}});await db.user.deleteMany({where:{id:{in:ids}}});for(const u of users)await auth.deleteUser(u.uid);console.log('Removed disposable unread fixtures');}catch{console.error('Unread fixture cleanup needs attention');process.exitCode=1;}
  await db.$disconnect();await deleteApp(app);
 }

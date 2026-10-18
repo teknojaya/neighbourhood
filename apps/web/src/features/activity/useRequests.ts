@@ -2,9 +2,9 @@ import { ApiRoutes, DonationRequestPageSchema, DonationRequestSchema, type Donat
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/api';
 
-export function useRequests(direction: 'incoming' | 'outgoing') {
+export function useRequests(direction: 'incoming' | 'outgoing', enabled = true) {
   return useInfiniteQuery({
-    queryKey: ['requests', direction], initialPageParam: null as string | null,
+    enabled, queryKey: ['requests', direction], initialPageParam: null as string | null,
     queryFn: ({ signal, pageParam }) => api(`${ApiRoutes.requests}/${direction}?limit=20${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ''}`, { schema: DonationRequestPageSchema, signal }),
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     refetchInterval: 15_000,

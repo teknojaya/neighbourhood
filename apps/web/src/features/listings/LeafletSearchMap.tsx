@@ -16,8 +16,8 @@ export default function LeafletSearchMap({ lat, lng, radiusKm, items }: { lat: n
     // Paths need an initialized view before their geographic bounds can be read.
     const map = L.map(container.current, { center, zoom: 13, scrollWheelZoom: false, zoomControl: true, dragging: true, attributionControl: true });
     instance.current = map;
-    const circle = L.circle(center, { radius: radiusKm * 1000, color: '#0f766e', weight: 2, fillColor: '#0f766e', fillOpacity: 0.12, interactive: false }).addTo(map);
-    L.circleMarker(center, { radius: 7, color: '#ffffff', weight: 3, fillColor: '#0f766e', fillOpacity: 1, interactive: false }).addTo(map);
+    const circle = L.circle(center, { radius: radiusKm * 1000, color: '#166534', weight: 2, fillColor: '#166534', fillOpacity: 0.12, interactive: false }).addTo(map);
+    L.circleMarker(center, { radius: 7, color: '#ffffff', weight: 3, fillColor: '#166534', fillOpacity: 1, interactive: false }).addTo(map);
     fit.current = () => { map.invalidateSize(); map.fitBounds(circle.getBounds(), { padding: [20, 20], maxZoom: 14, animate: false }); };
     fit.current();
     let loaded = 0; let failed = 0; let disposed = false;

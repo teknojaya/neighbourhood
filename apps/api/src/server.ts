@@ -82,7 +82,7 @@ function main() {
   const listings = new ListingsService(db, photoStorage);
   const matching = new MatchingService(db, listings, generator);
 
-  const services = { loans: new LoansService(db), communities: new CommunitiesService(db), needs: new PrismaNeedsService(db), requests: new PrismaRequestsService(db), conversations: new PrismaConversationsService(db, storage.conversations, photoStorage), notifications: new PrismaNotificationsService(db) };
+  const services = { loans: new LoansService(db, photoStorage), communities: new CommunitiesService(db), needs: new PrismaNeedsService(db), requests: new PrismaRequestsService(db, photoStorage), conversations: new PrismaConversationsService(db, storage.conversations, photoStorage), notifications: new PrismaNotificationsService(db) };
   const askServices = { ...services, marketplace: { listings, loans: services.loans, communities: services.communities, matching }, listings: { get: async (userId: string, id: string) => (await listings.getListingDetail(userId, id)).listing } };
   const ask = new PrismaAskService(db, config.gemini ? new GeminiAskModel(config.gemini.model, config.gemini.apiKey) : null,
     storage.ask, askServices);

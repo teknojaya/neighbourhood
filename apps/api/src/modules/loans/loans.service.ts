@@ -6,17 +6,19 @@ import { HttpError } from '../../lib/http.js';
 import { beforeCursor, decodeCursor, pageRows, type PageOptions } from '../../lib/pagination.js';
 import { runIdempotent } from '../requests/idempotency.js';
 import { ConversationsStore } from '../conversations/conversations.store.js';
+import type { ObjectStorage } from '../../lib/storage.js';
 
 type Create = z.infer<typeof CreateLoanBodySchema>;
 type Transition = z.infer<typeof LoanTransitionBodySchema>;
-const include = { listing: { select: { title: true } }, conversation: { select: { id: true } } };
+const include = { listing: { select: { title: true, photos: { orderBy: { position: 'asc' as const }, take: 1 } } }, conversation: { select: { id: true } } };
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 export class LoansService {
-  constructor(private readonly db: Db) {}
+  constructor(private readonly db: Db, private readonly photos?: ObjectStorage) {}
   private async read(tx: Db | Tx, userId: string, id: string) {
     const row = await tx.loan.findFirst({ where: { id, OR: [{ ownerId: userId }, { borrowerId: userId }] }, include });
     if (!row) throw new HttpError('NOT_FOUND', 'Loan not found');
     return LoanSchema.parse({ ...row, listingTitle: row.listing.title, overdue: row.status === 'checked_out' && iso(row.endDate) < iso(new Date()),
+      listingPhotoUrl: row.listing.photos[0] && this.photos ? await this.photos.signedReadUrl(row.listing.photos[0].storagePath) : undefined,
       startDate: iso(row.startDate), endDate: iso(row.endDate), checkedOutAt: row.checkedOutAt?.toISOString() ?? null,
       returnedAt: row.returnedAt?.toISOString() ?? null, conversationId: row.conversation?.id ?? null,
       createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(),

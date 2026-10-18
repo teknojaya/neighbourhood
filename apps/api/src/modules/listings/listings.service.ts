@@ -37,7 +37,7 @@ export class ListingsService {
         throw new HttpError('VALIDATION_FAILED', 'Point inventory requires point collection');
       }
       const row = await tx.listing.create({ data: {
-        ownerId, status: 'active', mode: input.mode, category: input.category, title: input.title,
+        ownerId, status: 'draft', mode: input.mode, category: input.category, title: input.title,
         description: input.description, condition: input.condition, stockTotal: input.quantity,
         areaLabel: point?.areaLabel ?? input.areaLabel, lat: point?.lat ?? input.exactLocation.lat, lng: point?.lng ?? input.exactLocation.lng, geohash: point?.geohash ?? geohashFor(input.exactLocation),
         pointInventoryItemId: input.pointInventoryItemId ?? null,
@@ -77,6 +77,7 @@ export class ListingsService {
     await runIdempotent(this.db, ownerId, key, `listing:${id}:transition`, { to }, async tx => {
       const row = await this.lock(tx, id, ownerId);
       assertTransition(listingMachine, row.status, to, 'owner');
+      if (to === 'active' && !await tx.listingPhoto.count({ where: { listingId: id } })) throw new HttpError('VALIDATION_FAILED', 'Add at least one photo before publishing this item');
       if (expectedUpdatedAt && row.updatedAt.toISOString() !== expectedUpdatedAt) throw new HttpError('CONFLICT', 'Listing changed; review a new preview');
       if (to === 'closed' && (row.stockReserved > 0 || await tx.loan.count({ where: { listingId: id, status: { in: ['approved', 'checked_out'] } } }))) throw new HttpError('CONFLICT', 'Finish active requests and loans before closing');
       await tx.listing.update({ where: { id }, data: { status: to } });
@@ -130,6 +131,7 @@ export class ListingsService {
     const result = await runIdempotent(this.db, userId, key, `listing:${id}:photo:${photoId}:delete`, {}, async tx => {
       await this.lock(tx, id, userId);
       const photo = await tx.listingPhoto.findFirst({ where: { id: photoId, listingId: id } });
+      if (photo && await tx.listingPhoto.count({ where: { listingId: id } }) <= 1) throw new HttpError('CONFLICT', 'Keep at least one photo. Add a replacement before removing this photo');
       if (photo) await tx.listingPhoto.delete({ where: { id: photoId } });
       return { status: 200, body: { removed: true, path: photo?.storagePath ?? null } };
     });

@@ -33,7 +33,8 @@
     "check": "npm run typecheck && npm run lint && npm run test && npm run build",
     "db:up": "docker compose up -d postgres",
     "db:migrate": "npm run db:migrate -w @neighbourhood/api",
-    "test:db": "npm run build:shared && npm run test:db -w @neighbourhood/api"
+    "test:db": "npm run build:shared && npm run test:db -w @neighbourhood/api",
+    "smoke:brand-activity": "node --env-file-if-exists=apps/api/.env --import tsx scripts/smoke-brand-activity.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

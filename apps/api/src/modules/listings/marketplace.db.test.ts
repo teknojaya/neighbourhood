@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import sharp from 'sharp';
-import { CreateListingBodySchema, modelSafe, type MarketplaceAction } from '@neighbourhood/shared';
+import { CreateListingBodySchema } from '@neighbourhood/shared';
 import { createApp } from '../../app.js';
 import { createDb } from '../../lib/db.js';
 import type { ObjectStorage } from '../../lib/storage.js';
@@ -43,10 +43,18 @@ async function fixture() {
   const storage = new MemoryStorage(); const listings = new ListingsService(db, storage);
   const services = { requests: new PrismaRequestsService(db), conversations: new PrismaConversationsService(db), notifications: new PrismaNotificationsService(db), needs: new PrismaNeedsService(db), loans: new LoansService(db), communities: new CommunitiesService(db) };
   const access = new PrismaAccessRepository(db);
-  const ask = new PrismaAskService(db, null, null, { ...services, marketplace: { listings, loans: services.loans, communities: services.communities }, listings: { get: async (uid, id) => (await listings.getListingDetail(uid, id)).listing } });
+  const privateFiles = new Map<string, Buffer>();
+  const images = { write: async (path: string, bytes: Buffer) => { privateFiles.set(path, bytes); }, read: async (path: string) => privateFiles.get(path)!, delete: async (path: string) => { privateFiles.delete(path); } };
+  const publishListing = async (...args: Parameters<ListingsService['createListing']>) => {
+    const row = await listings.createListing(...args);
+    if (row.status !== 'draft') return row;
+    await listings.uploadPhoto(args[0], row.id, await sharp({ create: { width: 5, height: 5, channels: 3, background: 'green' } }).png().toBuffer(), 'image/png', 'fixture_photo_' + row.id);
+    return listings.transitionStatus(args[0], row.id, 'active', 'fixture_publish_' + row.id);
+  };
+  const ask = new PrismaAskService(db, null, images, { ...services, marketplace: { listings, loans: services.loans, communities: services.communities }, listings: { get: async (uid, id) => (await listings.getListingDetail(uid, id)).listing } });
   const app = createApp({ config: testConfig(), db, tokenVerifier: new FakeVerifier(), users: new UserProvisioningService(new PrismaUsersRepository(db)), access,
     profiles: new ProfilesService(new PrismaProfilesRepository(db), access), otp: new EmailOtpService(null, false), ai: new AiService(null), ...services, listings, ask, matching: new MatchingService(db, listings, null) });
-  return { owner, neighbour, outsider, storage, listings, ask, app, ...services };
+  return { owner, neighbour, outsider, storage, listings, publishListing, ask, app, ...services };
 }
 afterAll(async () => {
   await db.askSession.deleteMany({ where: { userId: { in: users } } });
@@ -59,7 +67,7 @@ afterAll(async () => {
 });
 describe('integrated marketplace against PostgreSQL', () => {
   it('reuses pending request cards and recovers an existing request instead of failing confirmation', async () => {
-    const f = await fixture(); const listing = await f.listings.createListing(f.owner.id, body(), randomUUID());
+    const f = await fixture(); const listing = await f.publishListing(f.owner.id, body(), randomUUID());
     const session = await f.ask.create(f.neighbour.id, randomUUID()); const run = await db.askRun.create({data:{sessionId:session.id,clientMessageId:randomUUID(),requestHash:'a'.repeat(64)}});
     const tools = new AskTools(db,{needs:f.needs,requests:f.requests,conversations:f.conversations,notifications:f.notifications,listings:{get:async(uid,id)=>(await f.listings.getListingDetail(uid,id)).listing}});
     const ctx={userId:f.neighbour.id,sessionId:session.id,runId:run.id,attemptId:run.attemptId,signal:new AbortController().signal};
@@ -80,7 +88,7 @@ describe('integrated marketplace against PostgreSQL', () => {
     expect((await f.ask.detail(f.neighbour.id,session.id)).messages.items[0]?.parts[0]).toMatchObject({kind:'action',action:{errorCode:null,receipt:{link:`/activity?request=${existing.id}`}}});
   });
   it('asks for a same-title listing choice and rejects a different ordinal target', async () => {
-    const f=await fixture(); const first=await f.listings.createListing(f.owner.id,body(),randomUUID()); const second=await f.listings.createListing(f.owner.id,body(),randomUUID());
+    const f=await fixture(); const first=await f.publishListing(f.owner.id,body(),randomUUID()); const second=await f.publishListing(f.owner.id,body(),randomUUID());
     const session=await f.ask.create(f.neighbour.id,randomUUID()); const run=await db.askRun.create({data:{sessionId:session.id,clientMessageId:randomUUID(),requestHash:'a'.repeat(64)}});
     const tools=new AskTools(db,{needs:f.needs,requests:f.requests,conversations:f.conversations,notifications:f.notifications,listings:{get:async(uid,id)=>(await f.listings.getListingDetail(uid,id)).listing}});
     const ctx={userId:f.neighbour.id,sessionId:session.id,runId:run.id,attemptId:run.attemptId,signal:new AbortController().signal};
@@ -97,8 +105,11 @@ describe('integrated marketplace against PostgreSQL', () => {
     const tools=new AskTools(db,{needs:f.needs,requests:f.requests,conversations:f.conversations,notifications:f.notifications,marketplace:{listings:f.listings,loans:f.loans,communities:f.communities}});
     const ctx={userId:f.owner.id,sessionId:session.id,runId:run.id,attemptId:run.attemptId,signal:new AbortController().signal};
     await db.askMessage.create({data:{sessionId:session.id,sequence:0,role:'user',text:"Here's my clothes"}});
+    const photo = await f.ask.upload(f.owner.id, session.id, await sharp({create:{width:5,height:5,channels:3,background:'green'}}).png().toBuffer(), 'image/png');
+    await db.askMessage.update({where:{sessionId_sequence:{sessionId:session.id,sequence:0}},data:{attachmentIds:[photo.id]}});
     const draft=await tools.execute('draft_listing',{title:'Jackets',category:'clothing',mode:'donate',condition:'like_new',quantity:1,description:'Jackets to give away'},ctx);
-    expect(draft.parts).toMatchObject([{kind:'listing_draft',draft:{data:{quantity:null}}}]);
+    expect(draft.parts).toMatchObject([{kind:'questions',questions:[{question:'How many items are you sharing?'}]}]);
+    expect((await db.askDraft.findUniqueOrThrow({where:{sessionId_kind:{sessionId:session.id,kind:'listing'}}})).data).toMatchObject({quantity:null,attachmentIds:[photo.id]});
     expect((await tools.execute('prepare_publish_listing',{useSavedLocation:true},ctx)).parts).toMatchObject([{kind:'questions'}]);
     expect(await db.askAction.count({where:{sessionId:session.id}})).toBe(0);
     await db.askMessage.create({data:{sessionId:session.id,sequence:1,role:'assistant',text:'How many items are you sharing?'}});
@@ -112,7 +123,7 @@ describe('integrated marketplace against PostgreSQL', () => {
     const session = await f.ask.create(f.owner.id, randomUUID()); const run = await db.askRun.create({ data: { sessionId: session.id, clientMessageId: randomUUID(), requestHash: 'a'.repeat(64) } });
     const tools = new AskTools(db, { needs: f.needs, requests: f.requests, conversations: f.conversations, notifications: f.notifications, marketplace: { listings: f.listings, loans: f.loans, communities: f.communities } });
     const ctx = { userId: f.owner.id, sessionId: session.id, runId: run.id, attemptId: run.attemptId, signal: new AbortController().signal };
-    await db.askMessage.create({ data: { sessionId: session.id, sequence: 0, role: 'user', text: 'I am donating one shirt in good condition.' } });
+    await db.askMessage.create({ data: { sessionId: session.id, sequence: 0, role: 'user', text: 'I am donating one shirt in good condition.', attachmentIds: [(await f.ask.upload(f.owner.id, session.id, await sharp({create:{width:5,height:5,channels:3,background:'green'}}).png().toBuffer(), 'image/png')).id] } });
     await db.askSession.update({ where: { id: session.id }, data: { nextSequence: 1 } });
     const account = await tools.execute('my_account', {}, ctx);
     expect(account.result).toMatchObject({ searchLocationSet: true, pickupLocationReady: false, missingLocationFields: ['publicArea'] });
@@ -130,7 +141,7 @@ describe('integrated marketplace against PostgreSQL', () => {
     expect((await tools.execute('prepare_publish_listing', { useSavedLocation: true }, ctx)).parts).toMatchObject([{ kind: 'action' }]);
   });
   it('matches broad clothing words and keeps bookmarks private, idempotent and removable after unavailability', async () => {
-    const f = await fixture(); const item = await f.listings.createListing(f.owner.id, { ...body(), title: 'Cotton jackets', description: 'Two cotton outer layers.', category: 'clothing' }, randomUUID());
+    const f = await fixture(); const item = await f.publishListing(f.owner.id, { ...body(), title: 'Cotton jackets', description: 'Two cotton outer layers.', category: 'clothing' }, randomUUID());
     for (const query of ['clothes','pakaian','baju']) expect(await f.listings.searchListings({ searcherId: f.neighbour.id, center: body().exactLocation, radiusKm: 3, query, limit: 10 })).toMatchObject([{ id: item.id }]);
     expect(await f.listings.searchListings({ searcherId: f.neighbour.id, center: body().exactLocation, radiusKm: 3, query: 'red jackets', limit: 10 })).toEqual([]);
     await request(f.app).put('/api/v1/saved-items/' + item.id).set('Authorization', bearer(f.neighbour.firebaseUid)).expect(200);
@@ -154,7 +165,7 @@ describe('integrated marketplace against PostgreSQL', () => {
   });
 
   it('isolates private message photos, exposes product thumbnails and attaches exactly once to an authorized message', async () => {
-    const f = await fixture(); const item = await f.listings.createListing(f.owner.id, body(), randomUUID());
+    const f = await fixture(); const item = await f.publishListing(f.owner.id, body(), randomUUID());
     const bytes = await sharp({ create: { width: 4, height: 4, channels: 3, background: 'green' } }).png().toBuffer(); await f.listings.uploadPhoto(f.owner.id, item.id, bytes, 'image/png', randomUUID());
     const conversationId = (await f.requests.create(f.neighbour.id, randomUUID(), { listingId: item.id, quantity: 1, message: '' })).body.conversationId!;
     const files = new Map<string, Buffer>(); const images = { write: async (path: string, data: Buffer) => { files.set(path, data); }, read: async (path: string) => { const data = files.get(path); if (!data) throw new Error('missing'); return data; }, delete: async (path: string) => { files.delete(path); } };
@@ -216,7 +227,7 @@ describe('integrated marketplace against PostgreSQL', () => {
     const f = await fixture();
     await request(f.app).put('/api/v1/me/profile').set('Authorization', bearer(f.neighbour.firebaseUid)).send({ displayName: 'Raka', areaLabel: 'Test neighbourhood', homeLocation: body().exactLocation, searchRadiusKm: 7, preferredLanguage: 'en' }).expect(200);
     expect((await db.user.findUniqueOrThrow({ where: { id: f.neighbour.id } })).searchRadiusKm).toBe(7);
-    const far = await f.listings.createListing(f.owner.id, { ...body(), title: 'Needlecraft sewing machine', category: 'appliances', exactLocation: { lat: -6.14, lng: 106.816 } }, randomUUID());
+    const far = await f.publishListing(f.owner.id, { ...body(), title: 'Needlecraft sewing machine', category: 'appliances', exactLocation: { lat: -6.14, lng: 106.816 } }, randomUUID());
     const tools = new AskTools(db, { needs: f.needs, requests: f.requests, conversations: f.conversations, notifications: f.notifications, marketplace: { listings: f.listings, loans: f.loans, communities: f.communities } });
     const session = await f.ask.create(f.neighbour.id, randomUUID());
     const run = await db.askRun.create({ data: { sessionId: session.id, clientMessageId: randomUUID(), requestHash: 'a'.repeat(64) } });
@@ -231,8 +242,8 @@ describe('integrated marketplace against PostgreSQL', () => {
   });
   it('publishes exactly once, searches nearby, protects pickup, and completes the donation journey', async () => {
     const f = await fixture(); const key = randomUUID();
-    const listing = await f.listings.createListing(f.owner.id, body(), key);
-    expect((await f.listings.createListing(f.owner.id, body(), key)).id).toBe(listing.id);
+    const listing = await f.publishListing(f.owner.id, body(), key);
+    expect((await f.publishListing(f.owner.id, body(), key)).id).toBe(listing.id);
     const feed = await f.listings.searchListings({ searcherId: f.neighbour.id, center: body().exactLocation, radiusKm: 1, query: 'books', limit: 30 });
     expect(feed.some(item => item.id === listing.id)).toBe(true);
     expect(JSON.stringify(feed)).not.toContain('PRIVATE pickup');
@@ -248,7 +259,7 @@ describe('integrated marketplace against PostgreSQL', () => {
     expect((await f.listings.getListingDetail(f.owner.id, listing.id)).listing.stock).toEqual({ total: 3, reserved: 0, collected: 1 });
   });
   it('serializes close versus approval and never leaves closed reserved stock', async () => {
-    const f = await fixture(); const listing = await f.listings.createListing(f.owner.id, body());
+    const f = await fixture(); const listing = await f.publishListing(f.owner.id, body());
     const req = await f.requests.create(f.neighbour.id, randomUUID(), { listingId: listing.id, quantity: 1, message: '' });
     const outcomes = await Promise.allSettled([f.requests.transition(f.owner.id, randomUUID(), req.body.id, { to: 'approved' }), f.listings.transitionStatus(f.owner.id, listing.id, 'closed')]);
     expect(outcomes.filter(o => o.status === 'fulfilled')).toHaveLength(1);
@@ -262,10 +273,12 @@ describe('integrated marketplace against PostgreSQL', () => {
     const meta = await sharp(f.storage.files.get(a.body.storagePath)).metadata(); expect(meta.width).toBe(1600); expect(meta.format).toBe('webp'); expect(meta.exif).toBeUndefined();
     await request(f.app).post(`/api/v1/listings/${listing.id}/photos`).set('Authorization', bearer(f.outsider.firebaseUid)).set('Idempotency-Key', randomUUID()).set('Content-Type', 'image/png').send(bytes).expect(403);
     await request(f.app).put('/api/v1/storage/upload?path=' + a.body.storagePath).set('Content-Type', 'image/png').send(bytes).expect(401);
-    const deleteKey = randomUUID(); await f.listings.removePhoto(f.owner.id, listing.id, a.body.photoId, deleteKey); await f.listings.removePhoto(f.owner.id, listing.id, a.body.photoId, deleteKey); expect(f.storage.files.size).toBe(0);
+    await expect(f.listings.removePhoto(f.owner.id, listing.id, a.body.photoId, randomUUID())).rejects.toMatchObject({ code: 'CONFLICT' });
+    await f.listings.uploadPhoto(f.owner.id, listing.id, bytes, 'image/png', randomUUID());
+    const deleteKey = randomUUID(); await f.listings.removePhoto(f.owner.id, listing.id, a.body.photoId, deleteKey); await f.listings.removePhoto(f.owner.id, listing.id, a.body.photoId, deleteKey); expect(f.storage.files.size).toBe(1);
   });
   it('guards loan participants, concurrent overlap, checkout and return', async () => {
-    const f = await fixture(); const listing = await f.listings.createListing(f.owner.id, { ...body(), mode: 'lend', quantity: 1, lending: { maxLoanDays: 7, notes: null, depositRequired: false } });
+    const f = await fixture(); const listing = await f.publishListing(f.owner.id, { ...body(), mode: 'lend', quantity: 1, lending: { maxLoanDays: 7, notes: null, depositRequired: false } });
     const a = await f.loans.create(f.neighbour.id, randomUUID(), { listingId: listing.id, startDate: day(0), endDate: day(2), message: '' });
     const b = await f.loans.create(f.outsider.id, randomUUID(), { listingId: listing.id, startDate: day(1), endDate: day(3), message: '' });
     const incoming = await request(f.app).get('/api/v1/loans/incoming').set('Authorization', bearer(f.owner.firebaseUid)).expect(200);
@@ -301,9 +314,9 @@ describe('integrated marketplace against PostgreSQL', () => {
     await expect(f.communities.adjust(f.neighbour.id, randomUUID(), point.body.id, { itemId: stock.id, delta: -2, reason: 'damaged', note: 'Checked in person' })).rejects.toMatchObject({ code: 'INSUFFICIENT_STOCK' });
     expect((await f.communities.audit(f.neighbour.id, point.body.id)).items).toHaveLength(2);
     await db.pointInventoryItem.update({ where: { id: stock.id }, data: { bestBefore: new Date(day(-1)) } });
-    await expect(f.listings.createListing(f.neighbour.id, { ...body(), quantity: 1, pointInventoryItemId: stock.id, collection: { method: 'community_point', communityPointId: point.body.id } })).rejects.toMatchObject({ code: 'CONFLICT' });
+    await expect(f.publishListing(f.neighbour.id, { ...body(), quantity: 1, pointInventoryItemId: stock.id, collection: { method: 'community_point', communityPointId: point.body.id } })).rejects.toMatchObject({ code: 'CONFLICT' });
     await db.pointInventoryItem.update({ where: { id: stock.id }, data: { bestBefore: new Date(day(2)) } });
-    const pointListing = await f.listings.createListing(f.neighbour.id, { ...body(), quantity: 1, pointInventoryItemId: stock.id, collection: { method: 'community_point', communityPointId: point.body.id } });
+    const pointListing = await f.publishListing(f.neighbour.id, { ...body(), quantity: 1, pointInventoryItemId: stock.id, collection: { method: 'community_point', communityPointId: point.body.id } });
     expect(pointListing.bestBefore).toBe(day(2));
     await expect(f.listings.updateListing(f.neighbour.id, pointListing.id, { bestBefore: null })).rejects.toMatchObject({ code: 'CONFLICT' });
     const pointRequest = await f.requests.create(f.outsider.id, randomUUID(), { listingId: pointListing.id, quantity: 1, message: '' });
@@ -315,18 +328,21 @@ describe('integrated marketplace against PostgreSQL', () => {
     expect((await f.communities.audit(f.owner.id, point.body.id)).items[0]).toMatchObject({ reason: 'collected', requestId: pointRequest.body.id });
     await request(f.app).get('/api/v1/points/qr-image/' + point.body.qrId).expect('Content-Type', /image\/png/).expect(200);
   });
-  it('confirms Ask publication once, redacts private fields from model context and recovers history', async () => {
-    const f = await fixture(); const session = await f.ask.create(f.owner.id, randomUUID());
-    const action: MarketplaceAction = { operation: 'listing_publish', body: body(), attachmentIds: [] }; const clientId = randomUUID();
-    const a = await f.ask.prepareFromUi(f.owner.id, session.id, clientId, action); const b = await f.ask.prepareFromUi(f.owner.id, session.id, clientId, action); expect(b.id).toBe(a.id);
-    expect(await db.listing.count({ where: { ownerId: f.owner.id } })).toBe(0);
-    const receipt = await f.ask.confirm(f.owner.id, a.id, a.revision); expect(receipt.status).toBe('completed'); await f.ask.confirm(f.owner.id, a.id, a.revision);
-    expect(await db.listing.count({ where: { ownerId: f.owner.id } })).toBe(1);
-    expect(JSON.stringify(modelSafe((await f.ask.detail(f.owner.id, session.id)).messages.items))).not.toContain('PRIVATE pickup');
-    await expect(f.ask.confirm(f.outsider.id, a.id, a.revision)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  it('requires photos for public activation and Ask proposals, while keeping an unfinished item private', async () => {
+    const f = await fixture(); const listing = await f.listings.createListing(f.owner.id, body());
+    expect(listing.status).toBe('draft');
+    await expect(f.listings.transitionStatus(f.owner.id, listing.id, 'active')).rejects.toMatchObject({code:'VALIDATION_FAILED'});
+    expect(await f.listings.searchListings({center:body().exactLocation,radiusKm:3,limit:10})).not.toContainEqual(expect.objectContaining({id:listing.id}));
+    await expect(f.requests.create(f.neighbour.id,randomUUID(),{listingId:listing.id,quantity:1,message:''})).rejects.toBeDefined();
+    const session=await f.ask.create(f.owner.id,randomUUID());
+    await expect(f.ask.prepareFromUi(f.owner.id,session.id,randomUUID(),{operation:'listing_publish',body:body(),attachmentIds:[]})).rejects.toMatchObject({code:'VALIDATION_FAILED'});
+    expect(await db.askAction.count({where:{sessionId:session.id}})).toBe(0);
+    const photo=await f.listings.uploadPhoto(f.owner.id,listing.id,await sharp({create:{width:5,height:5,channels:3,background:'green'}}).png().toBuffer(),'image/png',randomUUID());
+    const published=await f.listings.transitionStatus(f.owner.id,listing.id,'active');expect(published.status).toBe('active');
+    await expect(f.listings.removePhoto(f.owner.id,listing.id,photo.photoId,randomUUID())).rejects.toMatchObject({code:'CONFLICT'});
   });
   it('rejects unauthorized proposals and stale edits, and keeps the original recovery deadline', async () => {
-    const f = await fixture(); const listing = await f.listings.createListing(f.owner.id, body()); const session = await f.ask.create(f.owner.id, randomUUID()); const otherSession = await f.ask.create(f.outsider.id, randomUUID());
+    const f = await fixture(); const listing = await f.publishListing(f.owner.id, body()); const session = await f.ask.create(f.owner.id, randomUUID()); const otherSession = await f.ask.create(f.outsider.id, randomUUID());
     await expect(f.ask.prepareFromUi(f.outsider.id, otherSession.id, randomUUID(), { operation: 'listing_transition', listingId: listing.id, body: { to: 'closed' } })).rejects.toMatchObject({ code: 'FORBIDDEN' });
     const proposal = await f.ask.prepareFromUi(f.owner.id, session.id, randomUUID(), { operation: 'listing_edit', listingId: listing.id, body: { title: 'Old preview title' } });
     await f.listings.updateListing(f.owner.id, listing.id, { title: 'New owner edit' });
@@ -338,7 +354,7 @@ describe('integrated marketplace against PostgreSQL', () => {
     expect((await db.user.findUniqueOrThrow({ where: { id: f.owner.id } })).searchRadiusKm).toBe(3);
   });
   it('expires approved requests once, releases stock and delivers generic push through a recoverable queue', async () => {
-    const f = await fixture(); const listing = await f.listings.createListing(f.owner.id, body()); const req = await f.requests.create(f.neighbour.id, randomUUID(), { listingId: listing.id, quantity: 1, message: '' });
+    const f = await fixture(); const listing = await f.publishListing(f.owner.id, body()); const req = await f.requests.create(f.neighbour.id, randomUUID(), { listingId: listing.id, quantity: 1, message: '' });
     await f.requests.transition(f.owner.id, randomUUID(), req.body.id, { to: 'approved' }); await db.donationRequest.update({ where: { id: req.body.id }, data: { pickupBy: new Date(Date.now() - 1000) } });
     const sent: string[] = []; const jobs = new MaintenanceService(db, { send: async (tokens, message) => { sent.push(JSON.stringify(message)); return { successCount: tokens.length, invalidTokens: [] }; } });
     expect(await jobs.expireRequests()).toBe(1); expect(await jobs.expireRequests()).toBe(0); expect((await f.listings.getListingDetail(f.owner.id, listing.id)).listing.stock.reserved).toBe(0);

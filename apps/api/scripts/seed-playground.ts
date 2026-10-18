@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -60,11 +60,11 @@ try {
   async function attachPhoto(item:{id:string;ownerId:string;title:string}){
     const existing=await db.listingPhoto.findFirst({where:{listingId:item.id},orderBy:{position:'asc'}});
     const asset=photoFor(item.title);const custom=option('--photos-dir');
-    if(!asset&&!custom)return;
+    if(!asset&&!custom)throw new Error('No bundled product photo for '+item.title);
     const file=custom?path.join(custom,item.title.toLowerCase().replace(/[^a-z0-9]+/g,'-')+'.jpg'):path.join(bundledPhotos,asset+'.jpg');
     try{
       if(existing){try{await photoStorage.get(existing.storagePath);}catch(error){const code=(error as {code?:number|string}).code;if(!['NOT_FOUND',404,'ENOENT'].includes(code!))throw error;await photoStorage.put(existing.storagePath,await normalizeImage(await readFile(file),'image/jpeg'),'image/webp');}return;}
-      await listingService.uploadPhoto(item.ownerId,item.id,await readFile(file),'image/jpeg','playground_photo_'+item.id+'_v1');
+      await listingService.uploadPhoto(item.ownerId,item.id,await readFile(file),'image/jpeg','playground_photo_'+item.id+'_'+randomUUID());
     }catch(error){if(!custom||(error as {code?:string}).code!=='ENOENT')throw error;}
   }
   const communityId=id(namespace+':community'); const approvalId=id(namespace+':approval-community'); const pointId=id(namespace+':point');
@@ -76,10 +76,12 @@ try {
   async function listing(key:string,ownerId:string,title:string,category:ItemCategory,km:number,mode:'donate'|'lend'='donate',status:'active'|'paused'|'closed'='active'){
     const location=point(km,parseInt(createHash('sha256').update(key).digest('hex').slice(0,4),16));
     const listingId=id(namespace+':listing:'+key);
-    const row=await db.listing.upsert({where:{id:listingId},update:{},create:{id:listingId,ownerId,title,category,mode,status,description:`${title}. Available for neighbourhood ${mode==='donate'?'sharing':'borrowing'}. Please agree on a collection time in chat.`,condition:'good',stockTotal:mode==='lend'?1:40,lat:location.lat,lng:location.lng,geohash:geohashFor(location),areaLabel:km>10?'Greater Jakarta':'Jakarta Pusat',collectionMethod:'owner_location',maxLoanDays:mode==='lend'?30:null,private:{create:{pickupInstructions:'Please message the owner to agree on the pickup meeting point.',contactNote:'Use the in-app conversation.'}}}});
-    await attachPhoto(row);return row;
+    const row=await db.listing.upsert({where:{id:listingId},update:{},create:{id:listingId,ownerId,title,category,mode,status:'draft',description:`${title}. Available for neighbourhood ${mode==='donate'?'sharing':'borrowing'}. Please agree on a collection time in chat.`,condition:'good',stockTotal:mode==='lend'?1:40,lat:location.lat,lng:location.lng,geohash:geohashFor(location),areaLabel:km>10?'Greater Jakarta':'Jakarta Pusat',collectionMethod:'owner_location',maxLoanDays:mode==='lend'?30:null,private:{create:{pickupInstructions:'Please message the owner to agree on the pickup meeting point.',contactNote:'Use the in-app conversation.'}}}});
+    await attachPhoto(row);
+    if(row.status==='draft'){await listingService.transitionStatus(ownerId,row.id,'active',randomUUID());if(status!=='active')await listingService.transitionStatus(ownerId,row.id,status,randomUUID());}
+    return db.listing.findUniqueOrThrow({where:{id:row.id}});
   }
-  const catalog:[string,ItemCategory,number,'donate'|'lend'][]=[['Picture books','books',0.5,'donate'],['Rice and pantry staples','groceries',1.2,'donate'],['Cotton jackets','clothing',1.8,'donate'],['Dinner plates','household',2.2,'donate'],['Rice cooker','appliances',2.6,'donate'],['Walking aid','mobility_aids',2.8,'lend'],['Cordless drill','household',4.5,'lend'],['Folding table','household',6.5,'lend'],['Children books','books',9,'donate'],['Sewing machine','appliances',16,'lend'],['Camping tent','household',28,'lend'],['Bicycle helmet','household',44,'donate'],['Garden trolley','household',65,'lend']];
+  const catalog:[string,ItemCategory,number,'donate'|'lend'][]=[['Picture books','books',0.5,'donate'],['Rice and pantry staples','groceries',1.2,'donate'],['Cotton jackets','clothing',1.8,'donate'],['Dinner plates','household',2.2,'donate'],['Rice cooker','appliances',2.6,'donate'],['Walking aid','mobility_aids',2.8,'lend'],['Cordless drill','household',4.5,'lend'],['Household tool set','household',6.5,'lend'],['Children books','books',9,'donate'],['Rice cooker to borrow','appliances',16,'lend'],['Weekend tool kit','household',28,'lend'],['Dinner plates set','household',44,'donate'],['Walking aid for longer loans','mobility_aids',65,'lend']];
   const catalogRows=[];for(const [index,[title,category,km,mode]] of catalog.entries())catalogRows.push(await listing('catalog:'+index,index%2?owner.id:neighbour.id,title,category,km,mode));
   const needs=new PrismaNeedsService(db);const requests=new PrismaRequestsService(db);const conversations=new PrismaConversationsService(db);const notifications=new PrismaNotificationsService(db);
   const ask=new PrismaAskService(db,null,storage.ask,{needs,requests,conversations,notifications});
@@ -89,7 +91,7 @@ try {
     for(const [index,status] of (['pending','approved','collected','rejected','cancelled','expired'] as const).entries()){
       for(const incoming of [false,true]){
         const giver=incoming?who:counterpart,receiver=incoming?counterpart:who;
-        const item=await listing(`${who.id}:request:${incoming}:${status}`,giver.id,['Story books','Kitchen bowls','Reading lamp','Cotton scarf','Storage basket','Pantry food parcel'][index]!,(index===5?'groceries':index===0?'books':'household'),7+index*0.15,'donate',status==='pending'||status==='approved'?'active':'paused');
+        const item=await listing(`${who.id}:request:${incoming}:${status}`,giver.id,['Story books','Kitchen bowls','Picture books set','Cotton scarf','Dinner plates bundle','Pantry food parcel'][index]!,(index===5?'groceries':index===3?'clothing':index===0||index===2?'books':'household'),7+index*0.15,'donate',status==='pending'||status==='approved'?'active':'paused');
         const requestId=id(`${namespace}:${who.id}:request:${incoming}:${status}`);const created=date(-index-1);
         await db.$transaction(async tx=>{
           if(await tx.donationRequest.findUnique({where:{id:requestId}}))return;
@@ -102,7 +104,7 @@ try {
     }
     for(const [index,status] of (['pending','approved','checked_out','returned','rejected','cancelled'] as const).entries()){
       const incoming=index%2===1; const lender=incoming?who:counterpart,borrower=incoming?counterpart:who;
-      const item=await listing(`${who.id}:loan:${status}`,lender.id,['Tool kit','Projector','Folding ladder','Board games','Camping stove','Hand trolley'][index]!,'household',8+index*0.2,'lend',status==='returned'||status==='rejected'||status==='cancelled'?'paused':'active');
+      const item=await listing(`${who.id}:loan:${status}`,lender.id,['Tool kit','Household tool set','Walking aid','Picture books collection','Rice cooker','Dinner plates set'][index]!,index===2?'mobility_aids':index===3?'books':index===4?'appliances':'household',8+index*0.2,'lend',status==='returned'||status==='rejected'||status==='cancelled'?'paused':'active');
       const loanId=id(`${namespace}:${who.id}:loan:${status}`);const created=date(status==='returned'?-8:-2-index);
       await db.loan.upsert({where:{id:loanId},update:{},create:{id:loanId,listingId:item.id,ownerId:lender.id,borrowerId:borrower.id,startDate:new Date(day(status==='returned'?-7:0)),endDate:new Date(day(status==='returned'?-4:status==='checked_out'?2:4)),status,checkedOutAt:status==='checked_out'?date(-0.1):status==='returned'?date(-7):null,returnedAt:status==='returned'?date(-4):null,returnConditionNote:status==='returned'?'Returned clean with all pieces.':null,message:'I would like to borrow this for a small project.',createdAt:created,conversation:{create:{id:id(loanId+':conversation'),closed:['returned','rejected','cancelled'].includes(status),lastMessageAt:created,participants:{create:[{userId:lender.id},{userId:borrower.id}]},messages:{create:{senderId:lender.id,body:'Please confirm the dates and return all pieces after use.',createdAt:created}}}}}});
       for(const userId of [lender.id,borrower.id])await db.notification.upsert({where:{id:id(loanId+':notification:'+userId)},update:{},create:{id:id(loanId+':notification:'+userId),userId,pushSentAt:new Date(),type:'loan_update',title:`Loan ${status}`,body:item.title+' has an update.',link:'/activity?loan='+loanId,createdAt:created,readAt:index%2?date(-0.2):null}});
@@ -131,9 +133,10 @@ try {
   const stockId=id(namespace+':pantry-stock');
   await db.pointInventoryItem.upsert({where:{id:stockId},update:{},create:{id:stockId,pointId,category:'groceries',title:'Sealed pantry parcels',available:20,bestBefore:new Date(day(60))}});
   await db.stockAdjustment.upsert({where:{id:id(stockId+':audit')},update:{},create:{id:id(stockId+':audit'),pointId,itemId:stockId,delta:20,reason:'correction',actorId:volunteer.id,note:'Opening inventory count.'}});
-  const pantryListing=await db.listing.upsert({where:{id:id(stockId+':listing')},update:{},create:{id:id(stockId+':listing'),ownerId:volunteer.id,title:'Pantry parcels',description:'Sealed pantry staples available from the sharing pantry.',category:'groceries',condition:'new',mode:'donate',status:'active',stockTotal:20,lat:pantry.lat,lng:pantry.lng,geohash:geohashFor(pantry),areaLabel:'Kebon Kacang, Jakarta Pusat',collectionMethod:'community_point',communityPointId:pointId,pointInventoryItemId:stockId,bestBefore:new Date(day(60)),private:{create:{pickupInstructions:'Collect during opening hours after approval.'}}}});
+  const pantryListing=await db.listing.upsert({where:{id:id(stockId+':listing')},update:{},create:{id:id(stockId+':listing'),ownerId:volunteer.id,title:'Pantry parcels',description:'Sealed pantry staples available from the sharing pantry.',category:'groceries',condition:'new',mode:'donate',status:'draft',stockTotal:20,lat:pantry.lat,lng:pantry.lng,geohash:geohashFor(pantry),areaLabel:'Kebon Kacang, Jakarta Pusat',collectionMethod:'community_point',communityPointId:pointId,pointInventoryItemId:stockId,bestBefore:new Date(day(60)),private:{create:{pickupInstructions:'Collect during opening hours after approval.'}}}});
   await attachPhoto(pantryListing);
-  for(const item of await db.listing.findMany({where:{ownerId:{in:people.map(p=>p.id)},status:{not:'closed'}},select:{id:true,ownerId:true,title:true}}))await attachPhoto(item);
+  if(pantryListing.status==='draft')await listingService.transitionStatus(volunteer.id,pantryListing.id,'active',randomUUID());
+  for(const item of await db.listing.findMany({where:{ownerId:{in:people.map(p=>p.id)},status:{not:'closed'}},select:{id:true,ownerId:true,title:true}}))if(photoFor(item.title))await attachPhoto(item);
   report(`Seed complete. ${catalogRows.length} distance scenarios (0.5–65 km); search supports 1–50 km. Product pins use rounded public coordinates.`);
   report(config.firebase.useEmulators?'Local logins at /login: owner / neighbour / volunteer / moderator / newcomer. No password required with emulators.':'Sign in through normal email OTP using the addresses in --accounts-file.');
   report('Existing records were not deleted or reset. Re-running preserves scenario progress.');

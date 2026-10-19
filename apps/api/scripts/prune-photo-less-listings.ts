@@ -5,14 +5,14 @@ import { fileURLToPath } from 'node:url';
 import { initializeApp, deleteApp } from 'firebase-admin/app';
 import { getStorage } from 'firebase-admin/storage';
 import { loadConfig } from '../src/config.js';
-import { createDb } from '../src/lib/db.js';
+import { createDb, isLoopbackDatabaseUrl } from '../src/lib/db.js';
 import { createStorageBundle } from '../src/lib/storage-bundle.js';
 
 // Deliberately local-only. Inspection is the default; --apply requires a full
 // PostgreSQL backup to succeed before any related marketplace data is removed.
 const config = loadConfig();
 const url = new URL(config.databaseUrl!);
-if (!config.firebase.useEmulators || !config.firebase.projectId?.startsWith('demo-') || !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) throw new Error('Cleanup requires a local database and Firebase emulators');
+if (!config.firebase.useEmulators || !config.firebase.projectId?.startsWith('demo-') || !isLoopbackDatabaseUrl(config.databaseUrl)) throw new Error('Cleanup requires a local database and Firebase emulators');
 const args = process.argv.slice(2);
 const report = (value: string) => process.stdout.write(value + '\n');
 const option = (name: string) => args[args.indexOf(name) + 1];

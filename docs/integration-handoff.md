@@ -97,9 +97,16 @@ requests. Schedule every minute using the same DB/bucket/secrets; see official
 6. Schedule maintenance, then verify HTTPS sign-in, real bucket operations,
    OTP delivery, push opt-in/delivery/revoke and mobile installation.
 
-No cloud resources/deployment were created. Existing ADC needs reauthentication
-(`invalid_grant`), so real bucket verification is blocked until the intended
-Google account is reauthenticated. SMTP sender settings and VAPID key are absent.
+No cloud resources/deployment were created. The exact Cloud Run/Cloud SQL
+command sequence and checklist are in [deployment-cloud-run.md](deployment-cloud-run.md).
+
+Local real-Firebase mode (2026-10-18): the API uses a service-account key via
+`GOOGLE_APPLICATION_CREDENTIALS` (file outside the repo, local only). Admin Auth
+works. Findings: the project had **no Storage bucket** until Storage is enabled
+in the console; the **IAM Credentials API is disabled**, so server-minted custom
+tokens (email OTP) fail with an attached service account until it is enabled.
+SMTP sender settings and the VAPID key are absent; the app reports both as
+unavailable.
 
 ## Verification record
 
@@ -122,3 +129,30 @@ Google account is reauthenticated. SMTP sender settings and VAPID key are absent
 Real SMTP, FCM and cloud bucket delivery remain unverified. Docker CLI cannot
 reach the installed Linux engine, so container execution remains unverified.
 These provider/runtime checks do not depend on Engineer 1 work.
+
+## Real-Firebase verification — 2026-10-18 (Node 24.22, local API/DB)
+
+Run locally against project `neighbourhood-web-app`, its private bucket, real
+Gemini (`gemini-3.5-flash-lite`) and local Docker PostgreSQL. No deployment.
+
+- `npm run check`: types, lint, **117 unit tests**, API/PWA builds. `npm run test:db`:
+  **64 PostgreSQL tests** on the disposable `_test` database.
+- Playground seed (real-Firebase path, `--allow-production --accounts-file
+  --target-uid`): 17 photographed products in all six categories; 17/17 photos stored
+  as private WebP objects; five sample Auth users created with Gmail `+` aliases.
+- Live API journeys with disposable fixture accounts (removed afterwards): 59/59 checks:
+  idempotent create/request/approve, photo upload and signed reads, private bucket,
+  radius search and privacy, saved items, request/approve/collect stock integrity,
+  over-allocation refusal, chat and private chat photos, unread counts, loans with
+  overlap protection, community/point permissions, real Gemini search, review cards
+  with explicit confirmation and refusal of unreviewed writes.
+- Browser (Chromium, production build served by the compiled API): login,
+  Google popup opener, CSP, signed-in Explore/detail photos, all main routes at
+  390 px, service worker shell caching (no API/photos), offline notice, API failure
+  with Try again recovery, sign-out. Google account selection itself was not automated.
+- Fixed: bucket uploads held 15 s DB transactions (failed on slow buckets, P2028);
+  COOP blocked Firebase popup sign-in in production; SPA fallback returned HTML for
+  missing hashed assets; Cloud SQL socket URLs passed local-database guards.
+
+Not verified: SMTP/email OTP (no sender configured; IAM Credentials API disabled),
+FCM push (no VAPID key), Cloud Run/Cloud SQL deployment.

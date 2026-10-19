@@ -290,19 +290,23 @@ export class PrismaAskService {
     const id = randomUUID();
     const path = `ask-attachments/${sessionId}/${id}`;
     try {
-      return await this.db.$transaction(async (tx) => {
+      // Write the object before the transaction so slow bucket I/O cannot hold the
+      // session lock past the timeout. The row is created only after the object
+      // exists, so an unready attachment is never exposed; chat deletion still
+      // serializes on the session lock, and unused objects are removed below.
+      await this.images.write(path, bytes, mimeType);
+      const result = await this.db.$transaction(async (tx) => {
         await this.lockSession(tx, userId, sessionId);
         const replay = await tx.askAttachment.findUnique({ where: { sessionId_uploadKey: { sessionId, uploadKey } } });
         if (replay) {
           if (replay.sourceHash !== sourceHash) throw new HttpError('CONFLICT', 'This upload key was used for a different photo');
-          return attachmentDto(replay);
+          return replay;
         }
         if (await tx.askAttachment.count({ where: { sessionId } }) >= 20) throw new HttpError('RATE_LIMITED', 'This chat has reached its photo limit');
-        // Serialize upload with chat deletion; never expose an unready attachment.
-        await this.images!.write(path, bytes, mimeType);
-        const row = await tx.askAttachment.create({ data: { id, sessionId, storagePath: path, mimeType, size: bytes.length, uploadKey, sourceHash, name: 'Photo.webp' } });
-        return attachmentDto(row);
+        return tx.askAttachment.create({ data: { id, sessionId, storagePath: path, mimeType, size: bytes.length, uploadKey, sourceHash, name: 'Photo.webp' } });
       }, { maxWait: 10_000, timeout: 15_000 });
+      if (result.storagePath !== path) await this.images.delete(path).catch(() => logger.warn('ask_upload_cleanup_failed', { attachmentId: id }));
+      return attachmentDto(result);
     } catch (err) {
       try { if (await this.db.askAttachment.count({ where: { storagePath: path } }) === 0) await this.images.delete(path); } catch { logger.warn('ask_upload_cleanup_failed', { attachmentId: id }); }
       if (err instanceof HttpError) throw err;

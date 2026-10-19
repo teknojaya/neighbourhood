@@ -16,6 +16,15 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * True for a request cancelled through its AbortSignal (React Query aborts the
+ * previous fetch when a query is unmounted, its key changes, or StrictMode
+ * remounts in development). Cancellation is expected, not a failed request.
+ */
+export function isAbortError(err: unknown): boolean {
+  return (err instanceof DOMException || err instanceof Error) && err.name === 'AbortError';
+}
+
 interface RequestOptions<T extends z.ZodType> {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
@@ -55,7 +64,7 @@ export async function api<T extends z.ZodType>(path: string, opts: RequestOption
       credentials: 'omit',
     });
   } catch (err) {
-    if ((err as Error).name === 'AbortError') throw err;
+    if (isAbortError(err)) throw err;
     throw navigator.onLine
       ? new ApiError('NETWORK', 'Could not reach NeighbourHood. Please try again.', 0)
       : new ApiError('OFFLINE', 'You are offline. Connect to the internet and try again.', 0);

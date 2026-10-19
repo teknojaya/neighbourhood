@@ -17,6 +17,8 @@ const EnvSchema = z.object({
 
   /** PostgreSQL connection string (Cloud SQL via unix socket in production). */
   DATABASE_URL: optionalString,
+  /** Connections per process; Cloud SQL caps the total across instances and jobs. */
+  DATABASE_POOL_MAX: optionalString.pipe(z.string().regex(/^(?:[1-9]|[1-9]\d|100)$/, 'DATABASE_POOL_MAX must be an integer from 1 to 100').optional()),
 
   FIREBASE_PROJECT_ID: optionalString,
   FIREBASE_STORAGE_BUCKET: optionalString,

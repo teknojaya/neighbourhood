@@ -84,6 +84,7 @@ and `SMOKE_SCREENSHOT_DIR` for mobile captures. They remove only their fixtures.
 
 [Architecture](docs/architecture.md) · [API](docs/api-contracts.md) ·
 [Status](docs/implementation-status.md) · [Runbook](docs/integration-handoff.md) ·
+[Cloud Run deployment](docs/deployment-cloud-run.md) ·
 [Acceptance checklist](docs/integration-checklist.md).
 
 The UI branch's scope and validation are recorded in the
@@ -91,7 +92,7 @@ The UI branch's scope and validation are recorded in the
 [PRODUCT.md](apps/web/PRODUCT.md) and the documented system in
 [DESIGN.md](apps/web/DESIGN.md).
 
-Deploy using the runbook: migrate PostgreSQL before serving the new app,
+Deploy using the [Cloud Run runbook](docs/deployment-cloud-run.md): migrate PostgreSQL before serving the new app,
 configure a private Firebase bucket, shared URL-signing secret and provider
 credentials, and schedule the maintenance job. No resources are deployed
 automatically. Secrets and local uploads must stay outside Git and images.

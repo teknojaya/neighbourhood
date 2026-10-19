@@ -98,6 +98,9 @@ export function createApp(deps: AppDeps): Express {
         },
       },
       crossOriginEmbedderPolicy: false,
+      // Firebase signInWithPopup must keep its opener link; helmet's default
+      // 'same-origin' breaks Google sign-in on the deployed origin.
+      crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
     }),
   );
 
@@ -170,8 +173,10 @@ export function createApp(deps: AppDeps): Express {
         },
       }),
     );
-    // SPA fallback for client-side routes.
-    app.get(/^\/(?!api\/).*/, (_req, res) => {
+    // SPA fallback for client-side routes. A missing file (e.g. a hashed chunk
+    // from a previous release) must 404, not return HTML the browser can't run.
+    app.get(/^\/(?!api\/).*/, (req, res, next) => {
+      if (req.path.startsWith('/assets/') || path.extname(req.path)) return next();
       res.set('Cache-Control', 'no-cache');
       res.sendFile(path.join(dist, 'index.html'));
     });

@@ -18,11 +18,12 @@ original special assistance feature is ordinary product categories.
 
 ## External release checks
 
-- [ ] Reauthenticate Google ADC and verify the real private bucket.
+- [ ] Enable Firebase Storage (default bucket) and verify the real private bucket.
+- [ ] Enable `iamcredentials.googleapis.com` and grant the runtime SA Token Creator on itself (email OTP custom tokens).
 - [ ] Configure SMTP/OTP secrets and test real email delivery.
 - [ ] Configure VAPID/FCM and verify HTTPS browser push opt-in/delivery/revoke.
-- [ ] Build/run the Docker image once the Linux engine is available; deploy
-  migrations, Cloud Run service and scheduled maintenance to the intended project.
+- [x] Docker `runtime` and `migrate` images build; runtime starts in production mode, enforces config guards and serves the PWA (2026-10-18, local Docker Desktop).
+- [ ] Deploy migrations, Cloud Run service and scheduled maintenance ([runbook](deployment-cloud-run.md)).
 
 Current evidence and local demo instructions: [integration runbook](integration-handoff.md).
 

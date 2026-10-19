@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { isLoopbackDatabaseUrl } from '../lib/db-url.js';
 
 /** Never migrate or reset the application database from a test run. */
 export function testDatabaseUrl() {
@@ -8,7 +9,7 @@ export function testDatabaseUrl() {
   const value = process.env.TEST_DATABASE_URL;
   if (!value) throw new Error('Set TEST_DATABASE_URL to a local PostgreSQL database ending in _test.');
   const url = new URL(value);
-  if (!['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) || !url.pathname.endsWith('_test')) {
+  if (!isLoopbackDatabaseUrl(value) || !url.pathname.endsWith('_test')) {
     throw new Error('Database tests require a loopback host and a database name ending in _test.');
   }
   if (process.env.DATABASE_URL) {

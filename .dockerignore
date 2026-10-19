@@ -17,3 +17,15 @@ service-account*.json
 artifacts
 neighbourhood-backup.sql
 **/*.dump
+# Credentials and local account files never enter build context or images
+# (the migrate target inherits the full build stage).
+*-service-account*.json
+*credentials*.json
+application_default_credentials.json
+*.pem
+*.key
+**/playground-accounts.local.json
+env
+**/.claude
+**/.windsurf
+docs

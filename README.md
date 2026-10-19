@@ -9,6 +9,12 @@ their own transport and collect from an owner or a community point.
 React 19/Vite/Tailwind PWA, Express 5, shared Zod contracts, PostgreSQL 17 with
 Prisma migrations, Firebase Auth/Storage/FCM, and server-side Gemini.
 
+# Live App:
+## https://neighbourhood-web-app.web.app
+
+# Launch/Demo Video:
+## https://youtu.be/iQSYhxnruXA
+
 ## Run locally
 
 Requirements: Node **24.12+**, npm, PostgreSQL 17, Java **21+** for emulators.

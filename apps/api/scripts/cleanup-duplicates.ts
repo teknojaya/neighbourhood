@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { initializeApp, deleteApp } from 'firebase-admin/app';
 import { getStorage } from 'firebase-admin/storage';
 import { loadConfig } from '../src/config.js';
-import { createDb } from '../src/lib/db.js';
+import { createDb, isLoopbackDatabaseUrl } from '../src/lib/db.js';
 import { createStorageBundle } from '../src/lib/storage-bundle.js';
 import { normalizeImage } from '../src/modules/ask/ask.images.js';
 import { catalogListingId, legacySeedIds, seedCatalog, seedId } from './seed-catalog.js';
@@ -15,7 +15,7 @@ import { catalogListingId, legacySeedIds, seedCatalog, seedId } from './seed-cat
 const args = process.argv.slice(2);
 const option = (key: string) => { const i = args.indexOf(key); return i < 0 ? undefined : args[i + 1]; };
 const config = loadConfig(), url = new URL(config.databaseUrl!);
-if (!config.firebase.useEmulators || !config.firebase.projectId?.startsWith('demo-') || !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) throw new Error('Seed repair requires a local database and demo Firebase emulators');
+if (!config.firebase.useEmulators || !config.firebase.projectId?.startsWith('demo-') || !isLoopbackDatabaseUrl(config.databaseUrl)) throw new Error('Seed repair requires a local database and demo Firebase emulators');
 const db = createDb(config.databaseUrl!), app = initializeApp({ projectId: config.firebase.projectId, storageBucket: config.firebase.storageBucket });
 const digest = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 const report = (message: string) => process.stdout.write(message + '\n');

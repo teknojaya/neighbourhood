@@ -110,13 +110,13 @@ export function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
 export function buildTestApp(opts: {
   generator?: StructuredGenerator | null; otp?: OtpDeps | null; firebaseConfigured?: boolean;
   requests?: RequestsService; conversations?: ConversationsService; notifications?: NotificationsService;
-  needs?: NeedsService;
+  needs?: NeedsService; config?: Partial<AppConfig>;
 } = {}) {
   const access = new InMemoryAccess();
   const users = new InMemoryUsers();
   const profilesRepo = new InMemoryProfiles(users);
   const app = createApp({
-    config: testConfig(),
+    config: testConfig(opts.config),
     tokenVerifier: new FakeVerifier(),
     users: new UserProvisioningService(users),
     access,

@@ -1,9 +1,10 @@
 import { useState, useId } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import type { ListingPublic } from '@neighbourhood/shared';
 import { Alert, Button, Card, TextField } from '../../components/ui';
 import { ApiError } from '../../lib/api';
-import { createLoan, fetchBookedDates } from './loansApi';
+import { AvailabilityStatus } from './AvailabilityStatus';
+import { bookedDatesQueryKey, createLoan, useBookedDates } from './loansApi';
 
 interface BorrowModalProps {
   listing: ListingPublic;
@@ -31,11 +32,10 @@ export function BorrowModal({ listing, onClose, onSuccess }: BorrowModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Fetch already approved/booked date intervals
-  const { data: bookedDates = [] } = useQuery({
-    queryKey: ['booked-dates', listing.id],
-    queryFn: ({ signal }) => fetchBookedDates(listing.id, signal),
-  });
+  // Booked intervals; confirmation stays disabled until they load successfully.
+  const qc = useQueryClient();
+  const availability = useBookedDates(listing.id);
+  const bookedDates = availability.data ?? [];
 
   // Calculate duration
   const startMs = Date.parse(`${startDate}T00:00:00Z`);
@@ -63,7 +63,7 @@ export function BorrowModal({ listing, onClose, onSuccess }: BorrowModalProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (validationError) return;
+    if (validationError || !availability.isSuccess) return;
 
     try {
       setIsSubmitting(true);
@@ -80,6 +80,7 @@ export function BorrowModal({ listing, onClose, onSuccess }: BorrowModalProps) {
     } catch (err) {
       console.error('[BorrowModal] createLoan failed:', err);
       if (err instanceof ApiError && err.code === 'CONFLICT') {
+        void qc.invalidateQueries({ queryKey: bookedDatesQueryKey(listing.id) });
         setErrorMessage('This item is already booked for these dates. Please choose another date range.');
       } else {
         setErrorMessage(err instanceof Error ? err.message : 'Failed to submit loan request.');
@@ -128,6 +129,8 @@ export function BorrowModal({ listing, onClose, onSuccess }: BorrowModalProps) {
             <Alert tone="error">{errorMessage}</Alert>
           </div>
         )}
+
+        <div className="mt-3"><AvailabilityStatus query={availability} /></div>
 
         {/* Booked dates notice if any */}
         {bookedDates.length > 0 && (
@@ -199,7 +202,7 @@ export function BorrowModal({ listing, onClose, onSuccess }: BorrowModalProps) {
             </Button>
             <Button
               type="submit"
-              disabled={isSubmitting || Boolean(validationError)}
+              disabled={isSubmitting || Boolean(validationError) || !availability.isSuccess}
             >
               {isSubmitting ? 'Sending Request...' : 'Send Loan Request'}
             </Button>

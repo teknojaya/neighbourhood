@@ -8,7 +8,7 @@ import {
   type ListingStatus,
 } from '@neighbourhood/shared';
 import { z } from 'zod';
-import { api } from '../../lib/api';
+import { api, isAbortError } from '../../lib/api';
 
 export const ListingDetailResponseSchema = z.object({
   listing: ListingPublicSchema,
@@ -39,7 +39,7 @@ export async function fetchMyListings(signal?: AbortSignal): Promise<ListingPubl
     });
     return res.items;
   } catch (err) {
-    console.error('[listingApi] fetchMyListings failed:', err);
+    if (!isAbortError(err)) console.error('[listingApi] fetchMyListings failed:', err);
     throw err;
   }
 }
@@ -55,7 +55,7 @@ export async function fetchListingDetail(listingId: string, signal?: AbortSignal
       signal,
     });
   } catch (err) {
-    console.error('[listingApi] fetchListingDetail failed:', err);
+    if (!isAbortError(err)) console.error('[listingApi] fetchListingDetail failed:', err);
     throw err;
   }
 }

@@ -3,8 +3,9 @@ import {
   type LoanStatus,
   type CreateLoanBody,
 } from '@neighbourhood/shared';
+import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
-import { api } from '../../lib/api';
+import { api, isAbortError } from '../../lib/api';
 
 /**
  * Extended loan schema based on canonical shared LoanSchema,
@@ -70,9 +71,17 @@ export async function fetchBookedDates(listingId: string, signal?: AbortSignal):
     });
     return res.booked ?? res.items ?? [];
   } catch (err) {
-    console.error('[loansApi] fetchBookedDates failed:', err);
-    return [];
+    // Never resolve as "no bookings" on failure: an unknown schedule is not a free one.
+    if (!isAbortError(err)) console.error('[loansApi] fetchBookedDates failed:', err);
+    throw err;
   }
+}
+
+export const bookedDatesQueryKey = (listingId: string) => ['availability', listingId] as const;
+
+/** Booked ranges for a lendable listing. Borrowing stays disabled until this succeeds. */
+export function useBookedDates(listingId: string) {
+  return useQuery({ queryKey: bookedDatesQueryKey(listingId), queryFn: ({ signal }) => fetchBookedDates(listingId, signal) });
 }
 
 /**
@@ -87,7 +96,7 @@ export async function fetchIncomingLoans(signal?: AbortSignal): Promise<LoanSumm
     });
     return res.items;
   } catch (err) {
-    console.error('[loansApi] fetchIncomingLoans failed:', err);
+    if (!isAbortError(err)) console.error('[loansApi] fetchIncomingLoans failed:', err);
     throw err;
   }
 }
@@ -104,7 +113,7 @@ export async function fetchOutgoingLoans(signal?: AbortSignal): Promise<LoanSumm
     });
     return res.items;
   } catch (err) {
-    console.error('[loansApi] fetchOutgoingLoans failed:', err);
+    if (!isAbortError(err)) console.error('[loansApi] fetchOutgoingLoans failed:', err);
     throw err;
   }
 }

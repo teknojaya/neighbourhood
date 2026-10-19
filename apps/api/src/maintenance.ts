@@ -27,5 +27,10 @@ try {
     for await (const photo of bucket.candidates()) if (Number.isFinite(photo.createdAt.getTime()) && Date.now() - photo.createdAt.getTime() > 86_400_000 && await db.listingPhoto.count({ where: { storagePath: photo.path } }) === 0) await bucket.remove(photo.path);
   }
   logger.info('maintenance_completed', { ...result, sessions, orphaned });
-} catch { logger.error('maintenance_failed'); process.exitCode = 1; }
+} catch (error) {
+  // Error class/code only: messages can contain connection strings or object paths.
+  const { name, code } = error as { name?: string; code?: string | number };
+  logger.error('maintenance_failed', { error: name ?? 'unknown', code: code ?? null });
+  process.exitCode = 1;
+}
 finally { await db.$disconnect(); await deleteApp(app); }

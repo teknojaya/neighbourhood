@@ -1,13 +1,15 @@
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Prisma, PrismaClient } from '../generated/prisma/client.js';
+import { databasePoolMax } from './db-url.js';
 
 export type Db = PrismaClient;
 export type Tx = Prisma.TransactionClient;
 export { Prisma };
+export { databasePoolMax, isLoopbackDatabaseUrl } from './db-url.js';
 
 /** Creates the Prisma client over node-postgres (Prisma 7 driver adapter). */
-export function createDb(connectionString: string): Db {
-  return new PrismaClient({ adapter: new PrismaPg({ connectionString, max: 10 }) });
+export function createDb(connectionString: string, max = databasePoolMax()): Db {
+  return new PrismaClient({ adapter: new PrismaPg({ connectionString, max }) });
 }
 
 /** PostgreSQL error code of a failed query, if any (e.g. 23505, 23P01). */

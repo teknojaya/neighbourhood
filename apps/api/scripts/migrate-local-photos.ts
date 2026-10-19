@@ -3,12 +3,12 @@ import fs from 'node:fs/promises';
 import { initializeApp, deleteApp } from 'firebase-admin/app';
 import { getStorage } from 'firebase-admin/storage';
 import { loadConfig } from '../src/config.js';
-import { createDb } from '../src/lib/db.js';
+import { createDb, isLoopbackDatabaseUrl } from '../src/lib/db.js';
 import { FirebaseObjectStorage, SAFE_PATH } from '../src/lib/storage.js';
 import { normalizeImage } from '../src/modules/ask/ask.images.js';
 
 const config = loadConfig();
-if (!config.firebase.useEmulators || !config.firebase.storageBucket || !['localhost','127.0.0.1','[::1]'].includes(new URL(config.databaseUrl!).hostname)) throw new Error('Legacy photo import requires local database and Storage emulator');
+if (!config.firebase.useEmulators || !config.firebase.storageBucket || !isLoopbackDatabaseUrl(config.databaseUrl)) throw new Error('Legacy photo import requires local database and Storage emulator');
 const app = initializeApp({ projectId: config.firebase.projectId, storageBucket: config.firebase.storageBucket });
 const bucket = new FirebaseObjectStorage(getStorage(app), config.firebase.storageBucket); const db = createDb(config.databaseUrl!);
 const root = path.resolve('uploads'); let migrated = 0, skipped = 0;

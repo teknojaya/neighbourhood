@@ -11,15 +11,17 @@ export class ConversationPhotos {
   async upload(userId: string, conversationId: string, source: Buffer, mimeType: string, uploadKey: string) {
     await this.access(userId, conversationId); if (!this.images) throw new HttpError('STORAGE_UNAVAILABLE', 'Photo storage is unavailable');
     const sourceHash = createHash('sha256').update(mimeType).update(source).digest('hex'), bytes = await normalizeImage(source, mimeType), id = randomUUID(), storagePath = `conversation-attachments/${conversationId}/${id}.webp`;
-    try { return await this.db.$transaction(async tx => {
+    // Object first, row second: bucket latency must not hold the conversation lock past the transaction timeout.
+    try { await this.images.write(storagePath, bytes, 'image/webp'); const row = await this.db.$transaction(async tx => {
       await tx.$queryRaw`SELECT id FROM conversations WHERE id = ${conversationId}::uuid FOR UPDATE`;
       const conversation = await this.access(userId, conversationId, tx); if (conversation.closed) throw new HttpError('CONFLICT', 'This conversation is closed');
       const existing = await tx.conversationAttachment.findUnique({ where: { conversationId_uploaderId_uploadKey: { conversationId, uploaderId: userId, uploadKey } } });
-      if (existing) { if (existing.sourceHash !== sourceHash) throw new HttpError('CONFLICT', 'Upload key used for a different photo'); return messagePhotoDto(existing); }
+      if (existing) { if (existing.sourceHash !== sourceHash) throw new HttpError('CONFLICT', 'Upload key used for a different photo'); return existing; }
       if (await tx.conversationAttachment.count({ where: { conversationId, uploaderId: userId, messageId: null } }) >= 2) throw new HttpError('CONFLICT', 'Send or remove your pending photos first');
-      await this.images!.write(storagePath, bytes, 'image/webp');
-      return messagePhotoDto(await tx.conversationAttachment.create({ data: { id, conversationId, uploaderId: userId, storagePath, mimeType: 'image/webp', size: bytes.length, sourceHash, uploadKey } }));
-    }, { maxWait: 10000, timeout: 15000 }); } catch (error) { try { if (!await this.db.conversationAttachment.count({ where: { storagePath } })) await this.images.delete(storagePath); } catch { /* maintenance retries orphan cleanup */ } if (error instanceof HttpError) throw error; throw new HttpError('STORAGE_UNAVAILABLE', 'Photo storage is temporarily unavailable'); }
+      return tx.conversationAttachment.create({ data: { id, conversationId, uploaderId: userId, storagePath, mimeType: 'image/webp', size: bytes.length, sourceHash, uploadKey } });
+    }, { maxWait: 10000, timeout: 15000 });
+    if (row.storagePath !== storagePath) await this.images.delete(storagePath).catch(() => undefined);
+    return messagePhotoDto(row); } catch (error) { try { if (!await this.db.conversationAttachment.count({ where: { storagePath } })) await this.images.delete(storagePath); } catch { /* maintenance retries orphan cleanup */ } if (error instanceof HttpError) throw error; throw new HttpError('STORAGE_UNAVAILABLE', 'Photo storage is temporarily unavailable'); }
   }
   async image(userId: string, conversationId: string, id: string) {
     await this.access(userId, conversationId);

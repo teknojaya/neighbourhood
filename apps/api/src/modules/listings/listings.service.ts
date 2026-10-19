@@ -114,16 +114,23 @@ export class ListingsService {
     const normalized = await normalizeImage(bytes, mimeType);
     const photoId = randomUUID();
     const path = `listings/${id}/${photoId}.webp`;
+    // Cheap pre-check so unauthorized callers never upload; the locked re-check below is authoritative.
+    const current = await this.db.listing.findUnique({ where: { id }, select: { ownerId: true } });
+    if (!current) throw new HttpError('NOT_FOUND', 'Item not found');
+    if (current.ownerId !== userId) throw new HttpError('FORBIDDEN', 'Only the owner can change this item');
     try {
+      // Upload before the transaction: slow bucket I/O must not hold row locks or hit the transaction timeout.
+      await this.storage.put(path, normalized, 'image/webp');
       const result = await runIdempotent(this.db, userId, key, `listing:${id}:photo`, { sourceHash }, async tx => {
         const row = await this.lock(tx, id, userId);
         if (row.status === 'closed') throw new HttpError('CONFLICT', 'Listing is closed');
         const count = await tx.listingPhoto.count({ where: { listingId: id } });
         if (count >= 6) throw new HttpError('CONFLICT', 'Maximum six photos per listing');
-        await this.storage!.put(path, normalized, 'image/webp');
         await tx.listingPhoto.create({ data: { id: photoId, listingId: id, storagePath: path, position: count } });
         return { status: 201, body: { photoId, storagePath: path } };
       });
+      // A replayed key returns the earlier photo; this request's object is unused.
+      if (result.body.storagePath !== path) await this.storage.remove(path).catch(() => undefined);
       return result.body;
     } catch (err) { try { if (await this.db.listingPhoto.count({ where: { storagePath: path } }) === 0) await this.storage.remove(path); } catch { /* An uncertain DB commit is verified by retry or orphan maintenance. */ } throw err; }
   }

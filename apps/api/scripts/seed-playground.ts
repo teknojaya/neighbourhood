@@ -8,7 +8,7 @@ import { getStorage } from 'firebase-admin/storage';
 import sharp from 'sharp';
 import { geohashFor, NeedsExtractionSchema, type LatLng } from '@neighbourhood/shared';
 import { loadConfig } from '../src/config.js';
-import { createDb, type Prisma } from '../src/lib/db.js';
+import { createDb, isLoopbackDatabaseUrl, type Prisma } from '../src/lib/db.js';
 import { PrismaAskService } from '../src/modules/ask/ask.service.js';
 import { PrismaNeedsService } from '../src/modules/needs/needs.service.js';
 import { PrismaRequestsService } from '../src/modules/requests/requests.service.js';
@@ -22,7 +22,7 @@ import { normalizeImage } from '../src/modules/ask/ask.images.js';
 // Additive, deterministic records. Re-running preserves edits, transitions and read markers.
 const args=process.argv.slice(2); const option=(name:string)=>{const i=args.indexOf(name);return i<0?undefined:args[i+1];};
 if(args.includes('--help')){process.stdout.write('seed:playground [--target-uid UID] [--grant-staff] [--scenario NAME] [--photos-dir PATH] [--refresh-photos] [--allow-production --accounts-file PATH]\n');process.exit(0);}
-const config=loadConfig(); const local=['localhost','127.0.0.1','[::1]'].includes(new URL(config.databaseUrl!).hostname);
+const config=loadConfig(); const local=isLoopbackDatabaseUrl(config.databaseUrl);
 if ((!local || !config.firebase.useEmulators) && !args.includes('--allow-production')) throw new Error('Use --allow-production explicitly with a production configuration.');
 if (!config.firebase.projectId || !config.firebase.storageBucket) throw new Error('Configure Firebase Auth and Storage first.');
 if (config.firebase.useEmulators && (!process.env.FIREBASE_AUTH_EMULATOR_HOST || !process.env.FIREBASE_STORAGE_EMULATOR_HOST)) throw new Error('Set Auth and Storage emulator hosts.');
